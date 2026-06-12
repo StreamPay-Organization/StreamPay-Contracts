@@ -6,9 +6,16 @@
 use crate::types::Stream;
 use soroban_sdk::{contracttype, Address, Env};
 
-/// Number of ledgers (~6 days) used as the persistent storage bump threshold.
+/// Time-to-live floor, in ledgers (~6 days at 5s/ledger).
+///
+/// When an entry's remaining TTL drops below this threshold, an `extend_ttl`
+/// call refreshes it. Choosing a non-zero floor avoids paying the extension
+/// fee on every access while still keeping entries comfortably alive.
 pub const BUMP_THRESHOLD: u32 = 100_000;
-/// Number of ledgers (~30 days) used as the persistent storage extend amount.
+/// Target TTL, in ledgers (~30 days at 5s/ledger), that each extension restores.
+///
+/// Entries accessed at least once a month therefore never expire; an
+/// abandoned stream's storage is eventually reclaimed by the network.
 pub const BUMP_EXTEND: u32 = 518_400;
 
 /// Keys used to address values in contract storage.
