@@ -84,3 +84,10 @@ pub fn write_stream(env: &Env, id: u64, stream: &Stream) {
         .persistent()
         .extend_ttl(&key, BUMP_THRESHOLD, BUMP_EXTEND);
 }
+
+/// Extends the time-to-live of the contract's instance storage.
+pub fn extend_instance(env: &Env) {
+    env.storage()
+        .instance()
+        .extend_ttl(BUMP_THRESHOLD, BUMP_EXTEND);
+}
