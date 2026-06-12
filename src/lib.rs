@@ -137,6 +137,15 @@ impl StreamPayContract {
         Ok(id)
     }
 
+    /// Returns the length of stream `id`'s vesting window in seconds.
+    ///
+    /// This is `end - start` and is always positive for a stored stream,
+    /// because [`Self::create_stream`] rejects non-increasing time ranges.
+    pub fn duration(env: Env, id: u64) -> Result<u64, Error> {
+        let stream = storage::read_stream(&env, id).ok_or(Error::StreamNotFound)?;
+        Ok(stream.end - stream.start)
+    }
+
     /// Returns the amount vested so far for stream `id` based on the current
     /// ledger timestamp.
     ///
