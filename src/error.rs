@@ -27,4 +27,6 @@ pub enum Error {
     NothingToWithdraw = 9,
     /// The stream has already completed and is fully withdrawn.
     AlreadyCompleted = 10,
+    /// The stream's end time is not in the future.
+    EndTimeInPast = 11,
 }

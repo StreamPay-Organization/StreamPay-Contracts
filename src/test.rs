@@ -117,6 +117,17 @@ fn set_time(env: &Env, ts: u64) {
 }
 
 #[test]
+fn test_create_stream_rejects_past_end_time() {
+    let s = setup();
+    // Advance the ledger past the proposed end time.
+    set_time(&s.env, 500);
+    let res = s
+        .contract
+        .try_create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    assert_eq!(res, Err(Ok(Error::EndTimeInPast)));
+}
+
+#[test]
 fn test_streamed_amount_zero_before_start() {
     let s = setup();
     let id = s

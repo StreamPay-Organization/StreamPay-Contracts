@@ -97,6 +97,10 @@ impl StreamPayContract {
         if end_time <= start_time {
             return Err(Error::InvalidTimeRange);
         }
+        // Reject streams that would already be fully vested on creation.
+        if end_time <= env.ledger().timestamp() {
+            return Err(Error::EndTimeInPast);
+        }
 
         // Pull the escrowed funds from the sender into the contract.
         let token = storage::read_token(&env);
