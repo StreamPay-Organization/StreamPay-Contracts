@@ -157,3 +157,21 @@ fn test_streamed_amount_quarter() {
     set_time(&s.env, 125);
     assert_eq!(s.contract.streamed_amount(&id), 250);
 }
+
+#[test]
+fn test_withdraw_transfers_vested_portion() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    set_time(&s.env, 150);
+    let paid = s.contract.withdraw(&id, &s.recipient);
+    assert_eq!(paid, 500);
+    assert_eq!(s.token.balance(&s.recipient), 500);
+    assert_eq!(s.token.balance(&s.contract.address), 500);
+
+    let stream = s.contract.get_stream(&id);
+    assert_eq!(stream.withdrawn, 500);
+    assert_eq!(stream.status, Status::Active);
+}
