@@ -45,6 +45,11 @@ deploy: build
 		--source $(SOURCE) \
 		--network $(NETWORK)
 
+# Build the API documentation without pulling in dependency docs.
+.PHONY: doc
+doc:
+	cargo doc --no-deps
+
 .PHONY: clean
 clean:
 	cargo clean
