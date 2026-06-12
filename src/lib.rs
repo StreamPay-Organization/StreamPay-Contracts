@@ -135,6 +135,17 @@ impl StreamPayContract {
         vesting::vested(&stream, now)
     }
 
+    /// Returns the amount of stream `id` that has not yet vested.
+    ///
+    /// This is `total - streamed_amount(id)` at the current ledger timestamp:
+    /// the portion still locked in the contract that would be refunded to the
+    /// sender on cancellation.
+    pub fn remaining_amount(env: Env, id: u64) -> Result<i128, Error> {
+        let stream = storage::read_stream(&env, id).ok_or(Error::StreamNotFound)?;
+        let now = env.ledger().timestamp();
+        vesting::unvested(&stream, now)
+    }
+
     /// Returns the amount currently available to withdraw for stream `id`.
     ///
     /// This is the vested amount minus what the recipient has already
