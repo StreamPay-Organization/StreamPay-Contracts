@@ -34,6 +34,15 @@ pub fn stream_topped_up(env: &Env, id: u64, sender: &Address, amount: i128, new_
         .publish(topics, (sender.clone(), amount, new_total));
 }
 
+/// Publishes an `extended` event when a stream's end time is pushed back.
+///
+/// `old_end` and `new_end` are the previous and updated end timestamps.
+pub fn stream_extended(env: &Env, id: u64, sender: &Address, old_end: u64, new_end: u64) {
+    let topics = (symbol_short!("extended"), id);
+    env.events()
+        .publish(topics, (sender.clone(), old_end, new_end));
+}
+
 /// Publishes a `cancelled` event when a stream is cancelled.
 ///
 /// `sender_refund` is the unstreamed remainder returned to the sender and

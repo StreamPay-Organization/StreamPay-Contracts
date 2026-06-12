@@ -172,6 +172,36 @@ impl StreamPayContract {
         Ok(new_total)
     }
 
+    /// Pushes back the `end` time of an active stream `id` to `new_end`.
+    ///
+    /// Only the stream's `sender` may extend, and they must authorize the call.
+    /// Extending lowers the per-second vesting rate by spreading the same total
+    /// over a longer window. `new_end` must be strictly later than the current
+    /// end, otherwise [`Error::InvalidTimeRange`] is returned. Errors with
+    /// [`Error::StreamNotActive`] if the stream is cancelled or completed.
+    pub fn extend_stream(env: Env, id: u64, sender: Address, new_end: u64) -> Result<(), Error> {
+        sender.require_auth();
+
+        let mut stream = storage::read_stream(&env, id).ok_or(Error::StreamNotFound)?;
+        if sender != stream.sender {
+            return Err(Error::Unauthorized);
+        }
+        if stream.status != Status::Active {
+            return Err(Error::StreamNotActive);
+        }
+        if new_end <= stream.end {
+            return Err(Error::InvalidTimeRange);
+        }
+
+        let old_end = stream.end;
+        stream.end = new_end;
+        storage::write_stream(&env, id, &stream);
+        storage::extend_instance(&env);
+
+        events::stream_extended(&env, id, &sender, old_end, new_end);
+        Ok(())
+    }
+
     /// Returns the lifecycle [`Status`] of stream `id`.
     pub fn get_status(env: Env, id: u64) -> Result<Status, Error> {
         let stream = storage::read_stream(&env, id).ok_or(Error::StreamNotFound)?;
