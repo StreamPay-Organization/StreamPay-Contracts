@@ -422,6 +422,50 @@ fn test_top_up_rejects_cancelled_stream() {
 }
 
 #[test]
+fn test_extend_stream_slows_vesting() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    // Double the window: end moves from 200 to 300.
+    s.contract.extend_stream(&id, &s.sender, &300);
+    assert_eq!(s.contract.get_stream(&id).end, 300);
+    assert_eq!(s.contract.duration(&id), 200);
+
+    // At t=150 the original midpoint now vests only a quarter.
+    set_time(&s.env, 150);
+    assert_eq!(s.contract.streamed_amount(&id), 250);
+}
+
+#[test]
+fn test_extend_stream_rejects_earlier_end() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    assert_eq!(
+        s.contract.try_extend_stream(&id, &s.sender, &150),
+        Err(Ok(Error::InvalidTimeRange))
+    );
+}
+
+#[test]
+fn test_extend_stream_rejects_non_sender() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    let stranger = Address::generate(&s.env);
+    assert_eq!(
+        s.contract.try_extend_stream(&id, &stranger, &300),
+        Err(Ok(Error::Unauthorized))
+    );
+}
+
+#[test]
 fn test_cancel_splits_funds_between_parties() {
     let s = setup();
     let id = s
