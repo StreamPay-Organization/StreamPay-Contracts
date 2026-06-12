@@ -175,3 +175,23 @@ fn test_withdraw_transfers_vested_portion() {
     assert_eq!(stream.withdrawn, 500);
     assert_eq!(stream.status, Status::Active);
 }
+
+#[test]
+fn test_double_withdraw_only_pays_new_vesting() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    set_time(&s.env, 150);
+    assert_eq!(s.contract.withdraw(&id, &s.recipient), 500);
+
+    // A second withdraw at the same time has nothing new to pay.
+    let res = s.contract.try_withdraw(&id, &s.recipient);
+    assert_eq!(res, Err(Ok(Error::NothingToWithdraw)));
+
+    // Advancing time lets the recipient pull only the newly vested amount.
+    set_time(&s.env, 175);
+    assert_eq!(s.contract.withdraw(&id, &s.recipient), 250);
+    assert_eq!(s.token.balance(&s.recipient), 750);
+}
