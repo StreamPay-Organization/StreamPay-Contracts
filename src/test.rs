@@ -288,3 +288,25 @@ fn test_double_cancel_fails() {
     let res = s.contract.try_cancel(&id, &s.sender);
     assert_eq!(res, Err(Ok(Error::AlreadyCancelled)));
 }
+
+#[test]
+fn test_get_unknown_stream_fails() {
+    let s = setup();
+    let res = s.contract.try_get_stream(&42);
+    assert_eq!(res, Err(Ok(Error::StreamNotFound)));
+}
+
+#[test]
+fn test_withdraw_after_cancel_fails() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    set_time(&s.env, 150);
+    s.contract.cancel(&id, &s.sender);
+
+    set_time(&s.env, 180);
+    let res = s.contract.try_withdraw(&id, &s.recipient);
+    assert_eq!(res, Err(Ok(Error::AlreadyCancelled)));
+}
