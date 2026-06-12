@@ -159,6 +159,57 @@ fn test_streamed_amount_quarter() {
 }
 
 #[test]
+fn test_withdrawable_amount_tracks_withdrawals() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    // Before start nothing is withdrawable.
+    set_time(&s.env, 50);
+    assert_eq!(s.contract.withdrawable_amount(&id), 0);
+
+    // At the midpoint the full vested half is withdrawable.
+    set_time(&s.env, 150);
+    assert_eq!(s.contract.withdrawable_amount(&id), 500);
+
+    // After withdrawing, the withdrawable amount drops back to zero.
+    s.contract.withdraw(&id, &s.recipient);
+    assert_eq!(s.contract.withdrawable_amount(&id), 0);
+}
+
+#[test]
+fn test_remaining_amount_complements_streamed() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    set_time(&s.env, 125);
+    // remaining + streamed always equals the escrowed total.
+    assert_eq!(s.contract.streamed_amount(&id), 250);
+    assert_eq!(s.contract.remaining_amount(&id), 750);
+
+    set_time(&s.env, 250);
+    assert_eq!(s.contract.remaining_amount(&id), 0);
+}
+
+#[test]
+fn test_progress_bps_reports_time_fraction() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    set_time(&s.env, 50);
+    assert_eq!(s.contract.progress_bps(&id), 0);
+    set_time(&s.env, 150);
+    assert_eq!(s.contract.progress_bps(&id), 5_000);
+    set_time(&s.env, 250);
+    assert_eq!(s.contract.progress_bps(&id), 10_000);
+}
+
+#[test]
 fn test_withdraw_transfers_vested_portion() {
     let s = setup();
     let id = s
