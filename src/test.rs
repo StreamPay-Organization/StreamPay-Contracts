@@ -356,3 +356,27 @@ fn test_multiple_streams_have_independent_ids() {
     // Both escrows are held simultaneously by the contract.
     assert_eq!(s.token.balance(&s.contract.address), 3_000);
 }
+
+#[test]
+fn test_create_stream_before_initialize_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(StreamPayContract, ());
+    let contract = StreamPayContractClient::new(&env, &contract_id);
+
+    let sender = Address::generate(&env);
+    let recipient = Address::generate(&env);
+    let res = contract.try_create_stream(&sender, &recipient, &1_000, &100, &200);
+    assert_eq!(res, Err(Ok(Error::NotInitialized)));
+}
+
+#[test]
+fn test_views_before_initialize_fail() {
+    let env = Env::default();
+    let contract_id = env.register(StreamPayContract, ());
+    let contract = StreamPayContractClient::new(&env, &contract_id);
+
+    assert_eq!(contract.try_get_admin(), Err(Ok(Error::NotInitialized)));
+    assert_eq!(contract.try_get_token(), Err(Ok(Error::NotInitialized)));
+}
