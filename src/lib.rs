@@ -12,6 +12,7 @@ mod types;
 mod vesting;
 
 use crate::error::Error;
+use crate::types::Stream;
 use soroban_sdk::{contract, contractimpl, Address, Env};
 
 /// The StreamPay contract type.
@@ -54,5 +55,10 @@ impl StreamPayContract {
     /// Returns the current stream counter (number of streams created).
     pub fn stream_counter(env: Env) -> u64 {
         storage::read_counter(&env)
+    }
+
+    /// Returns the stream with the given `id`, or [`Error::StreamNotFound`].
+    pub fn get_stream(env: Env, id: u64) -> Result<Stream, Error> {
+        storage::read_stream(&env, id).ok_or(Error::StreamNotFound)
     }
 }
