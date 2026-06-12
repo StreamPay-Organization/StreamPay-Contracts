@@ -368,6 +368,60 @@ fn test_withdraw_by_non_recipient_fails() {
 }
 
 #[test]
+fn test_top_up_increases_total_and_escrow() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    let new_total = s.contract.top_up(&id, &s.sender, &500);
+    assert_eq!(new_total, 1_500);
+    assert_eq!(s.contract.get_stream(&id).total, 1_500);
+
+    // The extra escrow moved from the sender into the contract.
+    assert_eq!(s.token.balance(&s.contract.address), 1_500);
+    assert_eq!(s.token.balance(&s.sender), 1_000_000 - 1_500);
+
+    // The larger total vests over the same window, so the midpoint is 750.
+    set_time(&s.env, 150);
+    assert_eq!(s.contract.streamed_amount(&id), 750);
+}
+
+#[test]
+fn test_top_up_rejects_non_sender_and_bad_amount() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    let stranger = Address::generate(&s.env);
+    assert_eq!(
+        s.contract.try_top_up(&id, &stranger, &500),
+        Err(Ok(Error::Unauthorized))
+    );
+    assert_eq!(
+        s.contract.try_top_up(&id, &s.sender, &0),
+        Err(Ok(Error::InvalidAmount))
+    );
+}
+
+#[test]
+fn test_top_up_rejects_cancelled_stream() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    set_time(&s.env, 150);
+    s.contract.cancel(&id, &s.sender);
+
+    assert_eq!(
+        s.contract.try_top_up(&id, &s.sender, &500),
+        Err(Ok(Error::StreamNotActive))
+    );
+}
+
+#[test]
 fn test_cancel_splits_funds_between_parties() {
     let s = setup();
     let id = s
