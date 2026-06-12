@@ -5,11 +5,14 @@
 //! linearly to a recipient over a time window. The recipient can withdraw the
 //! vested portion at any time, and either party can cancel an active stream.
 
-mod error;
+pub mod error;
 mod events;
 mod storage;
-mod types;
+pub mod types;
 mod vesting;
+
+#[cfg(test)]
+mod test;
 
 use crate::error::Error;
 use crate::types::{Status, Stream};

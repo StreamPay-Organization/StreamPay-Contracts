@@ -1,0 +1,56 @@
+#![cfg(test)]
+//! Unit tests for the StreamPay contract.
+
+extern crate std;
+
+use crate::error::Error;
+use crate::types::Status;
+use crate::{StreamPayContract, StreamPayContractClient};
+use soroban_sdk::testutils::{Address as _, Ledger};
+use soroban_sdk::token::{StellarAssetClient, TokenClient};
+use soroban_sdk::{Address, Env};
+
+/// Test fixture bundling the environment, contract client, token, and actors.
+#[allow(dead_code)]
+struct Setup<'a> {
+    env: Env,
+    contract: StreamPayContractClient<'a>,
+    token: TokenClient<'a>,
+    token_admin: StellarAssetClient<'a>,
+    admin: Address,
+    sender: Address,
+    recipient: Address,
+}
+
+/// Builds a fully initialized contract with a funded sender.
+fn setup<'a>() -> Setup<'a> {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let admin = Address::generate(&env);
+    let sender = Address::generate(&env);
+    let recipient = Address::generate(&env);
+
+    // Deploy a Stellar Asset Contract to act as the streamed token.
+    let issuer = Address::generate(&env);
+    let sac = env.register_stellar_asset_contract_v2(issuer);
+    let token = TokenClient::new(&env, &sac.address());
+    let token_admin = StellarAssetClient::new(&env, &sac.address());
+
+    let contract_id = env.register(StreamPayContract, ());
+    let contract = StreamPayContractClient::new(&env, &contract_id);
+    contract.initialize(&admin, &sac.address());
+
+    // Fund the sender so it can escrow streams.
+    token_admin.mint(&sender, &1_000_000);
+
+    Setup {
+        env,
+        contract,
+        token,
+        token_admin,
+        admin,
+        sender,
+        recipient,
+    }
+}
