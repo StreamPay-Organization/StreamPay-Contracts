@@ -6,9 +6,9 @@ extern crate std;
 use crate::error::Error;
 use crate::types::Status;
 use crate::{StreamPayContract, StreamPayContractClient};
-use soroban_sdk::testutils::{Address as _, Ledger};
+use soroban_sdk::testutils::{Address as _, AuthorizedFunction, Ledger};
 use soroban_sdk::token::{StellarAssetClient, TokenClient};
-use soroban_sdk::{Address, Env};
+use soroban_sdk::{Address, Env, IntoVal, Symbol};
 
 /// Test fixture bundling the environment, contract client, token, and actors.
 #[allow(dead_code)]
@@ -309,4 +309,32 @@ fn test_withdraw_after_cancel_fails() {
     set_time(&s.env, 180);
     let res = s.contract.try_withdraw(&id, &s.recipient);
     assert_eq!(res, Err(Ok(Error::AlreadyCancelled)));
+}
+
+#[test]
+fn test_create_stream_requires_sender_auth() {
+    let s = setup();
+    s.contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    // The recorded authorization must come from the sender and target the
+    // create_stream function with the exact arguments supplied.
+    let auths = s.env.auths();
+    let (who, invocation) = &auths[0];
+    assert_eq!(who, &s.sender);
+    assert_eq!(
+        invocation.function,
+        AuthorizedFunction::Contract((
+            s.contract.address.clone(),
+            Symbol::new(&s.env, "create_stream"),
+            (
+                s.sender.clone(),
+                s.recipient.clone(),
+                1_000_i128,
+                100_u64,
+                200_u64,
+            )
+                .into_val(&s.env),
+        ))
+    );
 }
