@@ -25,10 +25,18 @@ split the funds fairly between what has and has not yet vested.
 | --- | --- |
 | `initialize(admin, token)` | One-time setup: records the admin and the streamed token (SAC). |
 | `create_stream(sender, recipient, total_amount, start_time, end_time) -> u64` | Escrows `total_amount` from `sender` and opens a stream; returns its id. |
+| `top_up(id, sender, amount) -> i128` | Sender escrows `amount` more into an active stream; returns the new total. |
+| `extend_stream(id, sender, new_end)` | Sender pushes back an active stream's `end` time, slowing vesting. |
 | `streamed_amount(id) -> i128` | View: amount vested so far based on the ledger timestamp. |
 | `withdrawable_amount(id) -> i128` | View: vested-but-unwithdrawn balance available to the recipient right now. |
 | `remaining_amount(id) -> i128` | View: amount not yet vested (the sender's potential refund). |
 | `progress_bps(id) -> u32` | View: vesting progress in basis points (0..=10_000) by elapsed time. |
+| `percent_withdrawn(id) -> u32` | View: share of the total already withdrawn, in basis points. |
+| `duration(id) -> u64` | View: length of the vesting window in seconds. |
+| `elapsed(id) -> u64` | View: seconds of the window elapsed so far (clamped to the window). |
+| `get_summary(id) -> StreamSummary` | View: total, vested, withdrawn, withdrawable, progress, and status in one call. |
+| `get_status(id) -> Status` | View: the stream's lifecycle status. |
+| `is_active(id) -> bool` | View: whether the stream is still active. |
 | `withdraw(id, recipient) -> i128` | Recipient pulls the vested-but-unwithdrawn balance; returns the amount paid. |
 | `cancel(id, caller)` | Sender or recipient cancels; splits funds by vested/unvested. |
 | `get_stream(id) -> Stream` | View: the full stream record. |
@@ -58,6 +66,8 @@ event name and the stream id.
 | Topic | Data | Emitted by |
 | --- | --- | --- |
 | `("created", id)` | `(sender, recipient, total)` | `create_stream` |
+| `("toppedup", id)` | `(sender, amount, new_total)` | `top_up` |
+| `("extended", id)` | `(sender, old_end, new_end)` | `extend_stream` |
 | `("withdrawn", id)` | `(recipient, amount)` | `withdraw` |
 | `("cancelled", id)` | `(caller, sender_refund, recipient_paid)` | `cancel` |
 
