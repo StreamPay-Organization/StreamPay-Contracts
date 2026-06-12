@@ -1,6 +1,6 @@
 //! Core data types for the StreamPay contract.
 
-use soroban_sdk::contracttype;
+use soroban_sdk::{contracttype, Address};
 
 /// Lifecycle status of a payment stream.
 #[contracttype]
@@ -12,4 +12,27 @@ pub enum Status {
     Cancelled = 1,
     /// The stream has been fully withdrawn.
     Completed = 2,
+}
+
+/// A linear payment stream.
+///
+/// Tokens vest linearly from `start` to `end`. The escrowed `total` is held by
+/// the contract; `withdrawn` tracks how much the recipient has already pulled.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Stream {
+    /// The account funding the stream.
+    pub sender: Address,
+    /// The account receiving the streamed tokens.
+    pub recipient: Address,
+    /// The total amount escrowed for the stream.
+    pub total: i128,
+    /// The amount already withdrawn by the recipient.
+    pub withdrawn: i128,
+    /// The ledger timestamp at which vesting begins.
+    pub start: u64,
+    /// The ledger timestamp at which vesting completes.
+    pub end: u64,
+    /// The current lifecycle status of the stream.
+    pub status: Status,
 }
