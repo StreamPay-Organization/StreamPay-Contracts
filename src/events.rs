@@ -23,3 +23,20 @@ pub fn stream_withdrawn(env: &Env, id: u64, recipient: &Address, amount: i128) {
     let topics = (symbol_short!("withdrawn"), id);
     env.events().publish(topics, (recipient.clone(), amount));
 }
+
+/// Publishes a `cancelled` event when a stream is cancelled.
+///
+/// `sender_refund` is the unstreamed remainder returned to the sender and
+/// `recipient_paid` is the streamed-but-unwithdrawn amount paid to the
+/// recipient at cancellation time.
+pub fn stream_cancelled(
+    env: &Env,
+    id: u64,
+    caller: &Address,
+    sender_refund: i128,
+    recipient_paid: i128,
+) {
+    let topics = (symbol_short!("cancelled"), id);
+    env.events()
+        .publish(topics, (caller.clone(), sender_refund, recipient_paid));
+}
