@@ -125,3 +125,14 @@ fn test_streamed_amount_zero_before_start() {
     set_time(&s.env, 50);
     assert_eq!(s.contract.streamed_amount(&id), 0);
 }
+
+#[test]
+fn test_streamed_amount_half_at_midpoint() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    // Halfway through the window should vest half of the total.
+    set_time(&s.env, 150);
+    assert_eq!(s.contract.streamed_amount(&id), 500);
+}
