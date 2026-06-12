@@ -24,6 +24,16 @@ pub fn stream_withdrawn(env: &Env, id: u64, recipient: &Address, amount: i128) {
     env.events().publish(topics, (recipient.clone(), amount));
 }
 
+/// Publishes a `toppedup` event when a sender adds funds to a stream.
+///
+/// `amount` is the value escrowed by this top-up and `new_total` is the
+/// stream's total after the increase.
+pub fn stream_topped_up(env: &Env, id: u64, sender: &Address, amount: i128, new_total: i128) {
+    let topics = (symbol_short!("toppedup"), id);
+    env.events()
+        .publish(topics, (sender.clone(), amount, new_total));
+}
+
 /// Publishes a `cancelled` event when a stream is cancelled.
 ///
 /// `sender_refund` is the unstreamed remainder returned to the sender and

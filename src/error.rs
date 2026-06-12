@@ -31,4 +31,6 @@ pub enum Error {
     EndTimeInPast = 11,
     /// The requested amount is below the minimum stream amount.
     AmountBelowMinimum = 12,
+    /// The stream is not active, so the requested operation is not allowed.
+    StreamNotActive = 13,
 }

@@ -137,6 +137,41 @@ impl StreamPayContract {
         Ok(id)
     }
 
+    /// Adds `amount` more tokens to an active stream `id` and escrows them.
+    ///
+    /// Only the stream's `sender` may top up, and they must authorize the call.
+    /// The extra funds vest over the same window, increasing the per-second
+    /// rate. Returns the stream's new total. Errors with
+    /// [`Error::StreamNotActive`] if the stream is cancelled or completed.
+    pub fn top_up(env: Env, id: u64, sender: Address, amount: i128) -> Result<i128, Error> {
+        sender.require_auth();
+
+        if amount <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+
+        let mut stream = storage::read_stream(&env, id).ok_or(Error::StreamNotFound)?;
+        if sender != stream.sender {
+            return Err(Error::Unauthorized);
+        }
+        if stream.status != Status::Active {
+            return Err(Error::StreamNotActive);
+        }
+
+        let new_total = stream.total.checked_add(amount).ok_or(Error::Overflow)?;
+
+        let token = storage::read_token(&env);
+        let client = token::Client::new(&env, &token);
+        client.transfer(&sender, &env.current_contract_address(), &amount);
+
+        stream.total = new_total;
+        storage::write_stream(&env, id, &stream);
+        storage::extend_instance(&env);
+
+        events::stream_topped_up(&env, id, &sender, amount, new_total);
+        Ok(new_total)
+    }
+
     /// Returns the lifecycle [`Status`] of stream `id`.
     pub fn get_status(env: Env, id: u64) -> Result<Status, Error> {
         let stream = storage::read_stream(&env, id).ok_or(Error::StreamNotFound)?;
