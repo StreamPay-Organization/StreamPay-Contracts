@@ -11,8 +11,27 @@ mod storage;
 mod types;
 mod vesting;
 
-use soroban_sdk::contract;
+use crate::error::Error;
+use soroban_sdk::{contract, contractimpl, Address, Env};
 
 /// The StreamPay contract type.
 #[contract]
 pub struct StreamPayContract;
+
+#[contractimpl]
+impl StreamPayContract {
+    /// Initializes the contract with an `admin` and the streamed `token` (SAC).
+    ///
+    /// Can only be called once; subsequent calls return
+    /// [`Error::AlreadyInitialized`].
+    pub fn initialize(env: Env, admin: Address, token: Address) -> Result<(), Error> {
+        if storage::has_admin(&env) {
+            return Err(Error::AlreadyInitialized);
+        }
+        storage::write_admin(&env, &admin);
+        storage::write_token(&env, &token);
+        storage::write_counter(&env, 0);
+        storage::extend_instance(&env);
+        Ok(())
+    }
+}
