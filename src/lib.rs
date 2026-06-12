@@ -112,4 +112,15 @@ impl StreamPayContract {
         events::stream_created(&env, id, &sender, &recipient, total_amount);
         Ok(id)
     }
+
+    /// Returns the amount vested so far for stream `id` based on the current
+    /// ledger timestamp.
+    ///
+    /// The result is `0` before `start`, `total` at or after `end`, and a
+    /// linear interpolation in between.
+    pub fn streamed_amount(env: Env, id: u64) -> Result<i128, Error> {
+        let stream = storage::read_stream(&env, id).ok_or(Error::StreamNotFound)?;
+        let now = env.ledger().timestamp();
+        vesting::vested(&stream, now)
+    }
 }
