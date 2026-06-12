@@ -262,3 +262,29 @@ fn test_cancel_after_partial_withdraw() {
     // Sender is refunded the unstreamed 500.
     assert_eq!(s.token.balance(&s.sender), 1_000_000 - 500);
 }
+
+#[test]
+fn test_cancel_by_stranger_fails() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    set_time(&s.env, 150);
+    let stranger = Address::generate(&s.env);
+    let res = s.contract.try_cancel(&id, &stranger);
+    assert_eq!(res, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_double_cancel_fails() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    set_time(&s.env, 150);
+    s.contract.cancel(&id, &s.sender);
+    let res = s.contract.try_cancel(&id, &s.sender);
+    assert_eq!(res, Err(Ok(Error::AlreadyCancelled)));
+}
