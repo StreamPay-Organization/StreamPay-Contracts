@@ -6,6 +6,7 @@
 //! vested portion at any time, and either party can cancel an active stream.
 
 mod error;
+mod storage;
 mod types;
 
 use soroban_sdk::contract;
