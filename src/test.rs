@@ -117,6 +117,23 @@ fn set_time(env: &Env, ts: u64) {
 }
 
 #[test]
+fn test_get_summary_bundles_figures() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    set_time(&s.env, 150);
+    let summary = s.contract.get_summary(&id);
+    assert_eq!(summary.total, 1_000);
+    assert_eq!(summary.vested, 500);
+    assert_eq!(summary.withdrawn, 0);
+    assert_eq!(summary.withdrawable, 500);
+    assert_eq!(summary.progress_bps, 5_000);
+    assert_eq!(summary.status, Status::Active);
+}
+
+#[test]
 fn test_create_stream_rejects_past_end_time() {
     let s = setup();
     // Advance the ledger past the proposed end time.
