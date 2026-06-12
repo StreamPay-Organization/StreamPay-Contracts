@@ -189,7 +189,7 @@ impl StreamPayContract {
         // Recipient is owed the vested portion they have not yet withdrawn.
         let recipient_paid = vested.checked_sub(stream.withdrawn).ok_or(Error::Overflow)?;
         // Sender reclaims everything that has not vested.
-        let sender_refund = stream.total.checked_sub(vested).ok_or(Error::Overflow)?;
+        let sender_refund = vesting::unvested(&stream, now)?;
 
         stream.withdrawn = vested;
         stream.status = Status::Cancelled;

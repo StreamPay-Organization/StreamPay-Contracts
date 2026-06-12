@@ -31,3 +31,9 @@ pub fn vested(stream: &Stream, now: u64) -> Result<i128, Error> {
     let result = numerator.checked_div(duration).ok_or(Error::Overflow)?;
     Ok(result)
 }
+
+/// Returns the portion of `stream.total` that has not yet vested at `now`.
+pub fn unvested(stream: &Stream, now: u64) -> Result<i128, Error> {
+    let vested = vested(stream, now)?;
+    stream.total.checked_sub(vested).ok_or(Error::Overflow)
+}
