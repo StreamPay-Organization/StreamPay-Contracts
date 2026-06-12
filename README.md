@@ -45,3 +45,49 @@ vested(t) = total * (t - start) / (end - start)            otherwise
 
 Integer division truncates, so dust may accrue at the end of the window; it is
 always fully released once `t >= end`.
+
+## Build
+
+Install the Rust `wasm32-unknown-unknown` target and the
+[Stellar CLI](https://developers.stellar.org/docs/tools/developer-tools/cli/stellar-cli),
+then:
+
+```bash
+make build      # compile the optimized release wasm
+make test       # run the unit test suite
+make fmt        # format the source tree
+make clippy     # lint with warnings denied
+```
+
+The release artifact is written to:
+
+```
+target/wasm32-unknown-unknown/release/streampay_contract.wasm
+```
+
+## Deploy
+
+```bash
+# Optimize the wasm (optional but recommended).
+make optimize
+
+# Deploy to a network. Override SOURCE and NETWORK as needed.
+make deploy NETWORK=testnet SOURCE=alice
+```
+
+After deploying, initialize the contract once with an admin and the address of
+the Stellar Asset Contract (SAC) to stream:
+
+```bash
+stellar contract invoke \
+  --id <CONTRACT_ID> \
+  --source alice \
+  --network testnet \
+  -- initialize \
+  --admin <ADMIN_ADDRESS> \
+  --token <TOKEN_SAC_ADDRESS>
+```
+
+## License
+
+Licensed under the [MIT License](LICENSE).
