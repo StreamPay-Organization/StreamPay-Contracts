@@ -338,3 +338,21 @@ fn test_create_stream_requires_sender_auth() {
         ))
     );
 }
+
+#[test]
+fn test_multiple_streams_have_independent_ids() {
+    let s = setup();
+    let first = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    let second = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &2_000, &300, &400);
+
+    assert_eq!(first, 0);
+    assert_eq!(second, 1);
+    assert_eq!(s.contract.stream_counter(), 2);
+    assert_eq!(s.contract.get_stream(&second).total, 2_000);
+    // Both escrows are held simultaneously by the contract.
+    assert_eq!(s.token.balance(&s.contract.address), 3_000);
+}
