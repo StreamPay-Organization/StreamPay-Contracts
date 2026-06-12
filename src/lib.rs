@@ -293,9 +293,7 @@ impl StreamPayContract {
     pub fn withdrawable_amount(env: Env, id: u64) -> Result<i128, Error> {
         let stream = storage::read_stream(&env, id).ok_or(Error::StreamNotFound)?;
         let now = env.ledger().timestamp();
-        let vested = vesting::vested(&stream, now)?;
-        let available = vested.checked_sub(stream.withdrawn).ok_or(Error::Overflow)?;
-        Ok(if available > 0 { available } else { 0 })
+        vesting::withdrawable(&stream, now)
     }
 
     /// Withdraws the vested-but-unwithdrawn balance of stream `id` to its
@@ -318,8 +316,7 @@ impl StreamPayContract {
         }
 
         let now = env.ledger().timestamp();
-        let vested = vesting::vested(&stream, now)?;
-        let available = vested.checked_sub(stream.withdrawn).ok_or(Error::Overflow)?;
+        let available = vesting::withdrawable(&stream, now)?;
         if available <= 0 {
             return Err(Error::NothingToWithdraw);
         }

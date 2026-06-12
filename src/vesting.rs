@@ -38,6 +38,16 @@ pub fn unvested(stream: &Stream, now: u64) -> Result<i128, Error> {
     stream.total.checked_sub(vested).ok_or(Error::Overflow)
 }
 
+/// Returns the vested-but-unwithdrawn amount of `stream` at `now`.
+///
+/// This is `vested(now) - withdrawn`, clamped to be non-negative: the value a
+/// withdrawal would transfer to the recipient.
+pub fn withdrawable(stream: &Stream, now: u64) -> Result<i128, Error> {
+    let vested = vested(stream, now)?;
+    let available = vested.checked_sub(stream.withdrawn).ok_or(Error::Overflow)?;
+    Ok(if available > 0 { available } else { 0 })
+}
+
 /// Returns how many seconds of the stream's window have elapsed at `now`.
 ///
 /// The result is clamped to `[0, end - start]`: `0` before `start` and the
