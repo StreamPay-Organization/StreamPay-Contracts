@@ -248,6 +248,44 @@ fn test_progress_bps_reports_time_fraction() {
 }
 
 #[test]
+fn test_percent_withdrawn_tracks_total_pulled() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    // Nothing withdrawn yet.
+    assert_eq!(s.contract.percent_withdrawn(&id), 0);
+
+    // Withdraw half the total at the midpoint -> 5_000 bps.
+    set_time(&s.env, 150);
+    s.contract.withdraw(&id, &s.recipient);
+    assert_eq!(s.contract.percent_withdrawn(&id), 5_000);
+
+    // Withdraw the rest after the end -> 10_000 bps.
+    set_time(&s.env, 250);
+    s.contract.withdraw(&id, &s.recipient);
+    assert_eq!(s.contract.percent_withdrawn(&id), 10_000);
+}
+
+#[test]
+fn test_status_views_track_lifecycle() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    assert!(s.contract.is_active(&id));
+    assert_eq!(s.contract.get_status(&id), Status::Active);
+
+    set_time(&s.env, 150);
+    s.contract.cancel(&id, &s.sender);
+
+    assert!(!s.contract.is_active(&id));
+    assert_eq!(s.contract.get_status(&id), Status::Cancelled);
+}
+
+#[test]
 fn test_withdraw_transfers_vested_portion() {
     let s = setup();
     let id = s
