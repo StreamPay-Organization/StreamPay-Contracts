@@ -110,3 +110,18 @@ fn test_create_stream_rejects_bad_time_range() {
         .try_create_stream(&s.sender, &s.recipient, &1_000, &200, &100);
     assert_eq!(res, Err(Ok(Error::InvalidTimeRange)));
 }
+
+/// Sets the ledger timestamp used by time-based view functions.
+fn set_time(env: &Env, ts: u64) {
+    env.ledger().with_mut(|l| l.timestamp = ts);
+}
+
+#[test]
+fn test_streamed_amount_zero_before_start() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    set_time(&s.env, 50);
+    assert_eq!(s.contract.streamed_amount(&id), 0);
+}
