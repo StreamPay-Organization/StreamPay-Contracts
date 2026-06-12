@@ -3,6 +3,7 @@
 //! Instance storage holds singleton configuration (admin, token, counter).
 //! Persistent storage holds individual streams keyed by their id.
 
+use crate::types::Stream;
 use soroban_sdk::{contracttype, Address, Env};
 
 /// Number of ledgers (~6 days) used as the persistent storage bump threshold.
@@ -63,4 +64,23 @@ pub fn read_counter(env: &Env) -> u64 {
 /// Writes the stream counter into instance storage.
 pub fn write_counter(env: &Env, counter: u64) {
     env.storage().instance().set(&DataKey::Counter, &counter);
+}
+
+/// Returns `true` if a stream exists for the given id.
+pub fn has_stream(env: &Env, id: u64) -> bool {
+    env.storage().persistent().has(&DataKey::Stream(id))
+}
+
+/// Reads a stream from persistent storage, returning `None` if absent.
+pub fn read_stream(env: &Env, id: u64) -> Option<Stream> {
+    env.storage().persistent().get(&DataKey::Stream(id))
+}
+
+/// Writes a stream into persistent storage and extends its lifetime.
+pub fn write_stream(env: &Env, id: u64, stream: &Stream) {
+    let key = DataKey::Stream(id);
+    env.storage().persistent().set(&key, stream);
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, BUMP_THRESHOLD, BUMP_EXTEND);
 }
