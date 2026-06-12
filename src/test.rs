@@ -54,3 +54,18 @@ fn setup<'a>() -> Setup<'a> {
         recipient,
     }
 }
+
+#[test]
+fn test_initialize_sets_admin_and_token() {
+    let s = setup();
+    assert_eq!(s.contract.get_admin(), s.admin);
+    assert_eq!(s.contract.get_token(), s.token.address);
+    assert_eq!(s.contract.stream_counter(), 0);
+}
+
+#[test]
+fn test_initialize_twice_fails() {
+    let s = setup();
+    let res = s.contract.try_initialize(&s.admin, &s.token.address);
+    assert_eq!(res, Err(Ok(Error::AlreadyInitialized)));
+}
