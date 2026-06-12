@@ -26,6 +26,9 @@ split the funds fairly between what has and has not yet vested.
 | `initialize(admin, token)` | One-time setup: records the admin and the streamed token (SAC). |
 | `create_stream(sender, recipient, total_amount, start_time, end_time) -> u64` | Escrows `total_amount` from `sender` and opens a stream; returns its id. |
 | `streamed_amount(id) -> i128` | View: amount vested so far based on the ledger timestamp. |
+| `withdrawable_amount(id) -> i128` | View: vested-but-unwithdrawn balance available to the recipient right now. |
+| `remaining_amount(id) -> i128` | View: amount not yet vested (the sender's potential refund). |
+| `progress_bps(id) -> u32` | View: vesting progress in basis points (0..=10_000) by elapsed time. |
 | `withdraw(id, recipient) -> i128` | Recipient pulls the vested-but-unwithdrawn balance; returns the amount paid. |
 | `cancel(id, caller)` | Sender or recipient cancels; splits funds by vested/unvested. |
 | `get_stream(id) -> Stream` | View: the full stream record. |
