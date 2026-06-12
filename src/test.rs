@@ -69,3 +69,26 @@ fn test_initialize_twice_fails() {
     let res = s.contract.try_initialize(&s.admin, &s.token.address);
     assert_eq!(res, Err(Ok(Error::AlreadyInitialized)));
 }
+
+#[test]
+fn test_create_stream_escrows_and_returns_id() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    assert_eq!(id, 0);
+    assert_eq!(s.contract.stream_counter(), 1);
+
+    // The escrowed funds left the sender and now sit in the contract.
+    assert_eq!(s.token.balance(&s.sender), 1_000_000 - 1_000);
+    assert_eq!(s.token.balance(&s.contract.address), 1_000);
+
+    let stream = s.contract.get_stream(&id);
+    assert_eq!(stream.sender, s.sender);
+    assert_eq!(stream.recipient, s.recipient);
+    assert_eq!(stream.total, 1_000);
+    assert_eq!(stream.withdrawn, 0);
+    assert_eq!(stream.start, 100);
+    assert_eq!(stream.end, 200);
+    assert_eq!(stream.status, Status::Active);
+}
