@@ -18,3 +18,30 @@ split the funds fairly between what has and has not yet vested.
 - Authorization enforced with `require_auth` on every state-changing call.
 - Checked arithmetic throughout to avoid silent overflow.
 - Events emitted for stream creation, withdrawal, and cancellation.
+
+## Contract API
+
+| Function | Description |
+| --- | --- |
+| `initialize(admin, token)` | One-time setup: records the admin and the streamed token (SAC). |
+| `create_stream(sender, recipient, total_amount, start_time, end_time) -> u64` | Escrows `total_amount` from `sender` and opens a stream; returns its id. |
+| `streamed_amount(id) -> i128` | View: amount vested so far based on the ledger timestamp. |
+| `withdraw(id, recipient) -> i128` | Recipient pulls the vested-but-unwithdrawn balance; returns the amount paid. |
+| `cancel(id, caller)` | Sender or recipient cancels; splits funds by vested/unvested. |
+| `get_stream(id) -> Stream` | View: the full stream record. |
+| `get_admin() -> Address` | View: the configured admin. |
+| `get_token() -> Address` | View: the streamed token address. |
+| `stream_counter() -> u64` | View: number of streams created so far. |
+
+### Vesting
+
+The vested amount at timestamp `t` is:
+
+```
+vested(t) = 0                                              if t <= start
+vested(t) = total                                          if t >= end
+vested(t) = total * (t - start) / (end - start)            otherwise
+```
+
+Integer division truncates, so dust may accrue at the end of the window; it is
+always fully released once `t >= end`.
