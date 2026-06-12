@@ -242,3 +242,23 @@ fn test_cancel_splits_funds_between_parties() {
     let stream = s.contract.get_stream(&id);
     assert_eq!(stream.status, Status::Cancelled);
 }
+
+#[test]
+fn test_cancel_after_partial_withdraw() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    // Recipient withdraws 250 at t=125, then the recipient cancels at t=150.
+    set_time(&s.env, 125);
+    assert_eq!(s.contract.withdraw(&id, &s.recipient), 250);
+
+    set_time(&s.env, 150);
+    s.contract.cancel(&id, &s.recipient);
+
+    // Recipient now holds 500 total (250 + 250 vested-but-unwithdrawn).
+    assert_eq!(s.token.balance(&s.recipient), 500);
+    // Sender is refunded the unstreamed 500.
+    assert_eq!(s.token.balance(&s.sender), 1_000_000 - 500);
+}
