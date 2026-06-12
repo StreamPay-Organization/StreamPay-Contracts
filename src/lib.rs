@@ -24,7 +24,7 @@ contractmeta!(
     key = "desc",
     val = "Real-time linear payment-streaming contract for Stellar."
 );
-contractmeta!(key = "version", val = "0.1.0");
+contractmeta!(key = "version", val = "0.2.0");
 
 /// The smallest `total_amount` accepted by [`StreamPayContract::create_stream`].
 ///

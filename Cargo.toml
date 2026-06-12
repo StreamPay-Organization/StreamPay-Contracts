@@ -1,6 +1,6 @@
 [package]
 name = "streampay-contract"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["arisu6804 <arisu6804@gmail.com>"]
 description = "StreamPay: a real-time payment-streaming smart contract for Stellar (Soroban)."
