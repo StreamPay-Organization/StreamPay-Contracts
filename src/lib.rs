@@ -34,4 +34,12 @@ impl StreamPayContract {
         storage::extend_instance(&env);
         Ok(())
     }
+
+    /// Returns the admin address, or [`Error::NotInitialized`] if unset.
+    pub fn get_admin(env: Env) -> Result<Address, Error> {
+        if !storage::has_admin(&env) {
+            return Err(Error::NotInitialized);
+        }
+        Ok(storage::read_admin(&env))
+    }
 }
