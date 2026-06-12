@@ -16,7 +16,15 @@ mod test;
 
 use crate::error::Error;
 use crate::types::{Status, Stream};
-use soroban_sdk::{contract, contractimpl, token, Address, Env};
+use soroban_sdk::{contract, contractimpl, contractmeta, token, Address, Env};
+
+// Embed human-readable metadata into the compiled contract.
+contractmeta!(key = "name", val = "StreamPay");
+contractmeta!(
+    key = "desc",
+    val = "Real-time linear payment-streaming contract for Stellar."
+);
+contractmeta!(key = "version", val = "0.1.0");
 
 /// The StreamPay contract type.
 #[contract]
