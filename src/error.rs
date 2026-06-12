@@ -29,4 +29,6 @@ pub enum Error {
     AlreadyCompleted = 10,
     /// The stream's end time is not in the future.
     EndTimeInPast = 11,
+    /// The requested amount is below the minimum stream amount.
+    AmountBelowMinimum = 12,
 }

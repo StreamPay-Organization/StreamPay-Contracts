@@ -26,6 +26,12 @@ contractmeta!(
 );
 contractmeta!(key = "version", val = "0.1.0");
 
+/// The smallest `total_amount` accepted by [`StreamPayContract::create_stream`].
+///
+/// Requiring a minimum avoids dust streams whose per-second vesting truncates
+/// to zero and that only bloat persistent storage.
+pub const MIN_STREAM_AMOUNT: i128 = 1;
+
 /// The StreamPay contract type.
 #[contract]
 pub struct StreamPayContract;
@@ -93,6 +99,9 @@ impl StreamPayContract {
 
         if total_amount <= 0 {
             return Err(Error::InvalidAmount);
+        }
+        if total_amount < MIN_STREAM_AMOUNT {
+            return Err(Error::AmountBelowMinimum);
         }
         if end_time <= start_time {
             return Err(Error::InvalidTimeRange);
