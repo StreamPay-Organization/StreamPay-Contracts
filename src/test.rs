@@ -263,6 +263,22 @@ fn test_withdraw_full_after_end_completes_stream() {
 }
 
 #[test]
+fn test_withdraw_after_completion_fails() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    // Fully withdraw after the end, completing the stream.
+    set_time(&s.env, 300);
+    assert_eq!(s.contract.withdraw(&id, &s.recipient), 1_000);
+
+    // A further withdraw is rejected as already completed.
+    let res = s.contract.try_withdraw(&id, &s.recipient);
+    assert_eq!(res, Err(Ok(Error::AlreadyCompleted)));
+}
+
+#[test]
 fn test_withdraw_by_non_recipient_fails() {
     let s = setup();
     let id = s

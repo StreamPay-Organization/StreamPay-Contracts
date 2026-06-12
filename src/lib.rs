@@ -184,6 +184,9 @@ impl StreamPayContract {
         if stream.status == Status::Cancelled {
             return Err(Error::AlreadyCancelled);
         }
+        if stream.status == Status::Completed {
+            return Err(Error::AlreadyCompleted);
+        }
 
         let now = env.ledger().timestamp();
         let vested = vesting::vested(&stream, now)?;

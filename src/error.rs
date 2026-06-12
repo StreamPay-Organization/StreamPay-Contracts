@@ -25,4 +25,6 @@ pub enum Error {
     AlreadyCancelled = 8,
     /// There is nothing available to withdraw.
     NothingToWithdraw = 9,
+    /// The stream has already completed and is fully withdrawn.
+    AlreadyCompleted = 10,
 }
