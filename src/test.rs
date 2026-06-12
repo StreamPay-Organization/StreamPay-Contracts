@@ -206,6 +206,33 @@ fn test_remaining_amount_complements_streamed() {
 }
 
 #[test]
+fn test_duration_returns_window_length() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    assert_eq!(s.contract.duration(&id), 100);
+}
+
+#[test]
+fn test_elapsed_clamps_to_window() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    // Before start no time has elapsed.
+    set_time(&s.env, 50);
+    assert_eq!(s.contract.elapsed(&id), 0);
+    // Partway through reports the seconds since start.
+    set_time(&s.env, 175);
+    assert_eq!(s.contract.elapsed(&id), 75);
+    // Past the end it saturates at the full window length.
+    set_time(&s.env, 500);
+    assert_eq!(s.contract.elapsed(&id), 100);
+}
+
+#[test]
 fn test_progress_bps_reports_time_fraction() {
     let s = setup();
     let id = s
