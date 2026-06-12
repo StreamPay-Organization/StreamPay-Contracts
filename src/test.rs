@@ -136,3 +136,24 @@ fn test_streamed_amount_half_at_midpoint() {
     set_time(&s.env, 150);
     assert_eq!(s.contract.streamed_amount(&id), 500);
 }
+
+#[test]
+fn test_streamed_amount_full_after_end() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    set_time(&s.env, 250);
+    assert_eq!(s.contract.streamed_amount(&id), 1_000);
+}
+
+#[test]
+fn test_streamed_amount_quarter() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    // One quarter through the window vests a quarter of the total.
+    set_time(&s.env, 125);
+    assert_eq!(s.contract.streamed_amount(&id), 250);
+}
