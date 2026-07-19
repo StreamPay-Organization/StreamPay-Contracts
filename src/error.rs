@@ -39,4 +39,6 @@ pub enum Error {
     TimelockNotExpired = 15,
     /// The requested admin action would not change contract administration.
     InvalidAdminAction = 16,
+    /// A batch entrypoint was called without any operations.
+    EmptyBatch = 17,
 }
