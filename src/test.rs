@@ -710,3 +710,55 @@ fn test_is_valid_amount_helper() {
     assert!(!is_valid_amount(0));
     assert!(!is_valid_amount(-1));
 }
+
+// --- #44: input normalization helpers ---------------------------------------
+
+#[test]
+fn test_normalize_start_time_helper() {
+    use crate::normalize::normalize_start_time;
+    // The 0 sentinel resolves to the ledger clock; other values pass through.
+    assert_eq!(normalize_start_time(1_000, 0), 1_000);
+    assert_eq!(normalize_start_time(1_000, 500), 500);
+    assert_eq!(normalize_start_time(1_000, 2_000), 2_000);
+    assert_eq!(normalize_start_time(0, 0), 0);
+}
+
+#[test]
+fn test_clamp_to_window_helper() {
+    use crate::normalize::clamp_to_window;
+    // Values are clamped into [start, end] and untouched inside it.
+    assert_eq!(clamp_to_window(100, 200, 50), 100);
+    assert_eq!(clamp_to_window(100, 200, 100), 100);
+    assert_eq!(clamp_to_window(100, 200, 150), 150);
+    assert_eq!(clamp_to_window(100, 200, 200), 200);
+    assert_eq!(clamp_to_window(100, 200, 500), 200);
+}
+
+#[test]
+fn test_create_stream_zero_start_begins_now() {
+    let s = setup();
+    // A start_time of 0 is normalized to the current ledger timestamp.
+    set_time(&s.env, 1_000);
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &0, &2_000);
+
+    let stream = s.contract.get_stream(&id);
+    assert_eq!(stream.start, 1_000);
+    assert_eq!(stream.end, 2_000);
+
+    // Vesting runs from "now": halfway through the window vests half.
+    set_time(&s.env, 1_500);
+    assert_eq!(s.contract.streamed_amount(&id), 500);
+}
+
+#[test]
+fn test_create_stream_zero_start_rejects_end_before_now() {
+    let s = setup();
+    // With start normalized to now (1_000), an end at or before it is invalid.
+    set_time(&s.env, 1_000);
+    let res = s
+        .contract
+        .try_create_stream(&s.sender, &s.recipient, &1_000, &0, &500);
+    assert_eq!(res, Err(Ok(Error::InvalidTimeRange)));
+}

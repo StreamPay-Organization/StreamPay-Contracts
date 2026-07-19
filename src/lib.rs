@@ -5,11 +5,12 @@
 //! linearly to a recipient over a time window. The recipient can withdraw the
 //! vested portion at any time, and either party can cancel an active stream.
 
+pub mod constants;
 pub mod error;
 mod events;
+pub mod normalize;
 mod storage;
 pub mod types;
-pub mod constants;
 mod vesting;
 
 #[cfg(test)]
@@ -87,7 +88,9 @@ impl StreamPayContract {
     ///
     /// The `sender` must authorize the call. `total_amount` is transferred from
     /// the sender into the contract immediately. Vesting runs linearly from
-    /// `start_time` to `end_time`. Returns the new stream's id.
+    /// `start_time` to `end_time`. A `start_time` of `0` is shorthand for the
+    /// current ledger timestamp (see [`crate::normalize::normalize_start_time`]),
+    /// so the stream starts vesting immediately. Returns the new stream's id.
     pub fn create_stream(
         env: Env,
         sender: Address,
@@ -100,6 +103,9 @@ impl StreamPayContract {
             return Err(Error::NotInitialized);
         }
         sender.require_auth();
+
+        // Canonicalize raw inputs before validating them.
+        let start_time = normalize::normalize_start_time(env.ledger().timestamp(), start_time);
 
         if !is_valid_amount(total_amount) {
             return Err(Error::InvalidAmount);
@@ -380,7 +386,9 @@ impl StreamPayContract {
         let vested = vesting::vested(&stream, now)?;
 
         // Recipient is owed the vested portion they have not yet withdrawn.
-        let recipient_paid = vested.checked_sub(stream.withdrawn).ok_or(Error::Overflow)?;
+        let recipient_paid = vested
+            .checked_sub(stream.withdrawn)
+            .ok_or(Error::Overflow)?;
         // Sender reclaims everything that has not vested.
         let sender_refund = vesting::unvested(&stream, now)?;
 

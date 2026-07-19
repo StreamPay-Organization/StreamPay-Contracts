@@ -10,6 +10,7 @@
 //! All arithmetic is checked; on overflow the functions return [`Error::Overflow`].
 
 use crate::error::Error;
+use crate::normalize::clamp_to_window;
 use crate::types::Stream;
 
 /// Computes the linearly vested amount of `stream` at timestamp `now`.
@@ -24,10 +25,7 @@ pub fn vested(stream: &Stream, now: u64) -> Result<i128, Error> {
     let elapsed = (now - stream.start) as i128;
     let duration = (stream.end - stream.start) as i128;
 
-    let numerator = stream
-        .total
-        .checked_mul(elapsed)
-        .ok_or(Error::Overflow)?;
+    let numerator = stream.total.checked_mul(elapsed).ok_or(Error::Overflow)?;
     let result = numerator.checked_div(duration).ok_or(Error::Overflow)?;
     Ok(result)
 }
@@ -44,7 +42,9 @@ pub fn unvested(stream: &Stream, now: u64) -> Result<i128, Error> {
 /// withdrawal would transfer to the recipient.
 pub fn withdrawable(stream: &Stream, now: u64) -> Result<i128, Error> {
     let vested = vested(stream, now)?;
-    let available = vested.checked_sub(stream.withdrawn).ok_or(Error::Overflow)?;
+    let available = vested
+        .checked_sub(stream.withdrawn)
+        .ok_or(Error::Overflow)?;
     Ok(if available > 0 { available } else { 0 })
 }
 
@@ -53,11 +53,7 @@ pub fn withdrawable(stream: &Stream, now: u64) -> Result<i128, Error> {
 /// The result is clamped to `[0, end - start]`: `0` before `start` and the
 /// full window length at or after `end`.
 pub fn elapsed(stream: &Stream, now: u64) -> u64 {
-    if now <= stream.start {
-        return 0;
-    }
-    let end = if now >= stream.end { stream.end } else { now };
-    end - stream.start
+    clamp_to_window(stream.start, stream.end, now) - stream.start
 }
 
 /// Returns how far the stream's time window has progressed, in basis points.
