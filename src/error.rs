@@ -33,4 +33,6 @@ pub enum Error {
     AmountBelowMinimum = 12,
     /// The stream is not active, so the requested operation is not allowed.
     StreamNotActive = 13,
+    /// The operation would push the total escrowed supply above the global cap.
+    SupplyCapExceeded = 14,
 }

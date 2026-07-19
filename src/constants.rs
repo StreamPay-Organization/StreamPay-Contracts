@@ -20,6 +20,17 @@ pub const MIN_STREAM_AMOUNT: i128 = 1;
 /// boundary here documents that `0` (and negative amounts) are never valid.
 pub const MIN_VALID_AMOUNT: i128 = 1;
 
+/// Default global cap on the total amount escrowed across all active streams.
+///
+/// The admin may raise or lower this at any time via
+/// [`crate::StreamPayContract::set_supply_cap`]. `create_stream` and `top_up`
+/// both check the live cap stored in instance storage; this constant is only
+/// used during `initialize` to seed the storage entry.
+///
+/// Set to `i128::MAX` so the cap is effectively disabled by default and must
+/// be intentionally tightened by the admin.
+pub const DEFAULT_SUPPLY_CAP: i128 = i128::MAX;
+
 /// Error variants returned when a proposed amount violates the contract's
 /// limits.
 ///
