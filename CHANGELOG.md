@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `normalize` module with input normalization helpers. `normalize_start_time`
+  lets callers pass `0` as `create_stream`'s `start_time` as shorthand for the
+  current ledger timestamp, and `clamp_to_window` clamps a timestamp into a
+  stream's `[start, end]` window (now reused by the vesting views).
 - `constants` module centralizing the contract's tunable limits and validation
   helpers (`MIN_STREAM_AMOUNT`, `MIN_VALID_AMOUNT`, `is_valid_amount`). Both
   `create_stream` and `top_up` now route their amount checks through this single
