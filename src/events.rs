@@ -59,3 +59,17 @@ pub fn stream_cancelled(
     env.events()
         .publish(topics, (caller.clone(), sender_refund, recipient_paid));
 }
+
+/// Publishes an `admin_set` event when the admin role is transferred.
+pub fn admin_changed(env: &Env, old_admin: &Address, new_admin: &Address) {
+    let topics = (symbol_short!("admin_set"),);
+    env.events()
+        .publish(topics, (old_admin.clone(), new_admin.clone()));
+}
+
+/// Publishes an `upgraded` event when the contract's Wasm code is upgraded.
+pub fn contract_upgraded(env: &Env, new_wasm_hash: &soroban_sdk::BytesN<32>) {
+    let topics = (symbol_short!("upgraded"),);
+    env.events().publish(topics, new_wasm_hash.clone());
+}
+
