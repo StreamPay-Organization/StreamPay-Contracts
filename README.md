@@ -134,6 +134,66 @@ Active ──fully withdrawn──▶ Completed
 Once a stream leaves the `Active` status it is terminal: `top_up` and
 `extend_stream` return `StreamNotActive`.
 
+## Resource costs
+
+Soroban charges for CPU instructions, storage rent, and network bandwidth on
+every transaction. This section summarises what StreamPay costs per operation
+so integrators can set fees and TTLs confidently.
+
+### Instruction budget (approximate)
+
+State-changing calls are bounded by their storage and token-transfer work; view
+calls are read-only and much cheaper.
+
+| Operation | Relative cost | Dominant factor |
+| --- | --- | --- |
+| `initialize` | Low | 1 instance write + `extend_ttl` |
+| `create_stream` | Medium | 1 `token::transfer` + 1 persistent write |
+| `top_up` | Medium | 1 `token::transfer` + 1 persistent read/write |
+| `extend_stream` | Low-medium | 1 persistent read/write (no transfer) |
+| `withdraw` | Medium | 1 persistent read/write + 1 `token::transfer` |
+| `cancel` | Medium-high | 1 persistent read/write + up to 2 `token::transfer`s |
+| View functions | Very low | 1 persistent or instance read |
+
+### Storage rent
+
+Soroban charges rent on every byte kept alive in the ledger. StreamPay uses two
+storage types:
+
+| Storage class | Keys stored | TTL policy |
+| --- | --- | --- |
+| Instance | `Admin`, `Token`, `Counter` | Extended on every mutating call |
+| Persistent | `Stream(id)` per stream | Extended on every `write_stream` call |
+
+The constants governing TTL are defined in `src/storage.rs`:
+
+| Constant | Value (ledgers) | Approx. real time (5 s/ledger) |
+| --- | --- | --- |
+| `BUMP_THRESHOLD` | 100,000 | ~6 days |
+| `BUMP_EXTEND` | 518,400 | ~30 days |
+
+`BUMP_THRESHOLD` is the *minimum* TTL floor: if the remaining TTL is already
+above this value no extension fee is paid. `BUMP_EXTEND` is the *target* TTL
+restored on each extension. A stream accessed at least once per month never
+expires. An abandoned stream's entry is eventually reclaimed by the network.
+
+### Wasm binary size
+
+The optimised release binary is compiled with `opt-level = "z"`, LTO enabled,
+and debug symbols stripped (see `Cargo.toml`). These settings minimize
+footprint on the ledger, reducing the one-time upload cost and the ongoing rent
+for the wasm entry.
+
+### Practical guidance
+
+- Callers should budget a fee of at least **0.01 XLM** for writes and
+  **0.001 XLM** for reads on Testnet; confirm with `stellar contract invoke
+  --fee` before mainnet use.
+- Run `make simulate` (or `stellar contract simulate`) against Testnet to
+  measure actual instruction counts before deploying.
+- For detailed per-entrypoint budget numbers, TTL configuration rationale, and
+  rent-cost formulas see [`docs/resource-costs.md`](docs/resource-costs.md).
+
 ## Invariants
 
 - A stream's escrowed balance is always `total - withdrawn` while active; the
