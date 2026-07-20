@@ -1186,3 +1186,94 @@ fn test_persistent_ttl_bump_on_cancel() {
     });
 }
 
+// --- Admin-Only Guards Tests -----------------------------------------------
+
+#[test]
+fn test_set_admin_succeeds() {
+    let s = setup();
+    let new_admin = Address::generate(&s.env);
+
+    // Call set_admin. Since we aren't using `.mock_all_auths()` or similar, we must provide auth
+    // if it were a real environment, but `test` env handles it unless configured otherwise,
+    // actually we should use `mock_auths` to simulate the correct caller.
+    
+    // Instead of raw call, we will just simulate the admin caller.
+    // Wait, in `soroban_sdk`, tests often use `mock_all_auths()` or `mock_auths`.
+    // Let's just use `mock_auths` to ensure the admin is authorizing.
+    
+    s.contract
+        .mock_auths(&[soroban_sdk::testutils::MockAuth {
+            address: &s.admin,
+            invoke: &soroban_sdk::testutils::MockAuthInvoke {
+                contract: &s.contract.address,
+                fn_name: "set_admin",
+                args: (&new_admin,).into_val(&s.env),
+                sub_invokes: &[],
+            },
+        }])
+        .set_admin(&new_admin);
+
+    assert_eq!(s.contract.get_admin(), new_admin);
+}
+
+#[test]
+#[should_panic(expected = "Failed requirement")]
+fn test_set_admin_requires_admin_auth() {
+    let s = setup();
+    let hacker = Address::generate(&s.env);
+    let new_admin = Address::generate(&s.env);
+
+    // This will panic because the `hacker` is mocked as the authorizer,
+    // but the contract expects `s.admin` to authorize the call.
+    s.contract
+        .mock_auths(&[soroban_sdk::testutils::MockAuth {
+            address: &hacker,
+            invoke: &soroban_sdk::testutils::MockAuthInvoke {
+                contract: &s.contract.address,
+                fn_name: "set_admin",
+                args: (&new_admin,).into_val(&s.env),
+                sub_invokes: &[],
+            },
+        }])
+        .set_admin(&new_admin);
+}
+
+#[test]
+fn test_upgrade_succeeds() {
+    let s = setup();
+    // Generate a fake Wasm hash.
+    let new_wasm_hash = soroban_sdk::BytesN::from_array(&s.env, &[1u8; 32]);
+
+    // Admin should be able to upgrade.
+    s.contract
+        .mock_auths(&[soroban_sdk::testutils::MockAuth {
+            address: &s.admin,
+            invoke: &soroban_sdk::testutils::MockAuthInvoke {
+                contract: &s.contract.address,
+                fn_name: "upgrade",
+                args: (&new_wasm_hash,).into_val(&s.env),
+                sub_invokes: &[],
+            },
+        }])
+        .upgrade(&new_wasm_hash);
+}
+
+#[test]
+#[should_panic(expected = "Failed requirement")]
+fn test_upgrade_requires_admin_auth() {
+    let s = setup();
+    let hacker = Address::generate(&s.env);
+    let new_wasm_hash = soroban_sdk::BytesN::from_array(&s.env, &[1u8; 32]);
+
+    s.contract
+        .mock_auths(&[soroban_sdk::testutils::MockAuth {
+            address: &hacker,
+            invoke: &soroban_sdk::testutils::MockAuthInvoke {
+                contract: &s.contract.address,
+                fn_name: "upgrade",
+                args: (&new_wasm_hash,).into_val(&s.env),
+                sub_invokes: &[],
+            },
+        }])
+        .upgrade(&new_wasm_hash);
+}

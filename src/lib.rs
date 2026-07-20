@@ -168,6 +168,42 @@ impl StreamPayContract {
         Ok(storage::read_token(&env))
     }
 
+    /// Transfers the admin role to a new address.
+    ///
+    /// The current admin must authorize the call.
+    pub fn set_admin(env: Env, new_admin: Address) -> Result<(), Error> {
+        if !storage::has_admin(&env) {
+            return Err(Error::NotInitialized);
+        }
+        
+        let current_admin = storage::read_admin(&env);
+        current_admin.require_auth();
+
+        storage::write_admin(&env, &new_admin);
+        storage::extend_instance(&env);
+
+        events::admin_changed(&env, &current_admin, &new_admin);
+        Ok(())
+    }
+
+    /// Upgrades the contract's Wasm code to `new_wasm_hash`.
+    ///
+    /// The current admin must authorize the call.
+    pub fn upgrade(env: Env, new_wasm_hash: soroban_sdk::BytesN<32>) -> Result<(), Error> {
+        if !storage::has_admin(&env) {
+            return Err(Error::NotInitialized);
+        }
+        
+        let current_admin = storage::read_admin(&env);
+        current_admin.require_auth();
+
+        env.deployer().update_current_contract_wasm(new_wasm_hash.clone());
+        storage::extend_instance(&env);
+
+        events::contract_upgraded(&env, &new_wasm_hash);
+        Ok(())
+    }
+
     /// Returns the current stream counter (number of streams created).
     pub fn stream_counter(env: Env) -> u64 {
         storage::read_counter(&env)
