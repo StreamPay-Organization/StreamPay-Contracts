@@ -86,3 +86,13 @@ pub fn stream_cancelled(
     env.events()
         .publish(topics, (caller.clone(), sender_refund, recipient_paid));
 }
+
+/// Publishes a `capadmin` event when the admin changes the supply cap.
+///
+/// `old_cap` and `new_cap` bracket the change so indexers can detect the
+/// transition without re-reading state.
+pub fn supply_cap_updated(env: &Env, admin: &Address, old_cap: i128, new_cap: i128) {
+    let topics = (symbol_short!("capadmin"),);
+    env.events()
+        .publish(topics, (admin.clone(), old_cap, new_cap));
+}

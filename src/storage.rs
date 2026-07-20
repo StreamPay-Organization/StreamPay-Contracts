@@ -32,6 +32,13 @@ pub enum DataKey {
     PendingAdmin,
     /// Ledger timestamp at which the pending admin transfer may execute (instance).
     AdminActionExecuteAfter,
+    /// Running total of tokens currently held in escrow across all active
+    /// streams (instance).  Incremented on `create_stream` / `top_up` and
+    /// decremented when tokens leave the contract on `withdraw` or `cancel`.
+    TotalSupply,
+    /// The maximum value that `TotalSupply` may reach (instance).
+    /// Set during `initialize` and adjustable by the admin afterwards.
+    SupplyCap,
     /// A stream stored by its id (persistent).
     Stream(u64),
 }
@@ -129,4 +136,39 @@ pub fn extend_instance(env: &Env) {
     env.storage()
         .instance()
         .extend_ttl(BUMP_THRESHOLD, BUMP_EXTEND);
+}
+
+// ---------------------------------------------------------------------------
+// Supply cap helpers
+// ---------------------------------------------------------------------------
+
+/// Reads the current total escrowed supply, defaulting to zero.
+pub fn read_total_supply(env: &Env) -> i128 {
+    env.storage()
+        .instance()
+        .get(&DataKey::TotalSupply)
+        .unwrap_or(0)
+}
+
+/// Writes the total escrowed supply into instance storage.
+pub fn write_total_supply(env: &Env, supply: i128) {
+    env.storage()
+        .instance()
+        .set(&DataKey::TotalSupply, &supply);
+}
+
+/// Reads the supply cap from instance storage.
+///
+/// Panics if called before initialization; callers should guard with
+/// [`has_admin`] / the `NotInitialized` error first.
+pub fn read_supply_cap(env: &Env) -> i128 {
+    env.storage()
+        .instance()
+        .get(&DataKey::SupplyCap)
+        .unwrap_or(i128::MAX)
+}
+
+/// Writes the supply cap into instance storage.
+pub fn write_supply_cap(env: &Env, cap: i128) {
+    env.storage().instance().set(&DataKey::SupplyCap, &cap);
 }

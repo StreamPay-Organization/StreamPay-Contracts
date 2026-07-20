@@ -35,7 +35,7 @@ contractmeta!(key = "version", val = "0.2.0");
 /// access through the crate root.
 pub use crate::constants::{ADMIN_TIMELOCK_DELAY, MIN_STREAM_AMOUNT};
 
-use crate::constants::is_valid_amount;
+use crate::constants::{is_valid_amount, DEFAULT_SUPPLY_CAP};
 
 /// The StreamPay contract type.
 #[contract]
@@ -54,6 +54,8 @@ impl StreamPayContract {
         storage::write_admin(&env, &admin);
         storage::write_token(&env, &token);
         storage::write_counter(&env, 0);
+        storage::write_total_supply(&env, 0);
+        storage::write_supply_cap(&env, DEFAULT_SUPPLY_CAP);
         storage::extend_instance(&env);
         Ok(())
     }
@@ -171,6 +173,50 @@ impl StreamPayContract {
         storage::read_counter(&env)
     }
 
+    /// Returns the total amount currently held in escrow across all active
+    /// streams.
+    ///
+    /// This value is incremented when `create_stream` or `top_up` transfers
+    /// tokens into the contract, and decremented when tokens leave via
+    /// `withdraw` (completion) or `cancel` (refund + vested payout).
+    pub fn get_total_supply(env: Env) -> i128 {
+        storage::read_total_supply(&env)
+    }
+
+    /// Returns the current supply cap.
+    ///
+    /// `create_stream` and `top_up` both fail with
+    /// [`Error::SupplyCapExceeded`] if the resulting total supply would exceed
+    /// this value.
+    pub fn get_supply_cap(env: Env) -> i128 {
+        storage::read_supply_cap(&env)
+    }
+
+    /// Updates the global supply cap to `new_cap`.
+    ///
+    /// Only the admin may call this. `new_cap` must be positive (> 0); setting
+    /// it below the current `total_supply` does not affect existing streams but
+    /// will prevent new ones from being created until supply drops below the
+    /// new cap. Emits a `capadmin` event on success.
+    pub fn set_supply_cap(env: Env, new_cap: i128) -> Result<(), Error> {
+        if !storage::has_admin(&env) {
+            return Err(Error::NotInitialized);
+        }
+        let admin = storage::read_admin(&env);
+        admin.require_auth();
+
+        if new_cap <= 0 {
+            return Err(Error::InvalidAmount);
+        }
+
+        let old_cap = storage::read_supply_cap(&env);
+        storage::write_supply_cap(&env, new_cap);
+        storage::extend_instance(&env);
+
+        events::supply_cap_updated(&env, &admin, old_cap, new_cap);
+        Ok(())
+    }
+
     /// Returns the stream with the given `id`, or [`Error::StreamNotFound`].
     pub fn get_stream(env: Env, id: u64) -> Result<Stream, Error> {
         storage::read_stream(&env, id).ok_or(Error::StreamNotFound)
@@ -213,6 +259,16 @@ impl StreamPayContract {
             return Err(Error::EndTimeInPast);
         }
 
+        // Check the global supply cap before pulling any tokens.
+        let current_supply = storage::read_total_supply(&env);
+        let new_supply = current_supply
+            .checked_add(total_amount)
+            .ok_or(Error::Overflow)?;
+        let cap = storage::read_supply_cap(&env);
+        if new_supply > cap {
+            return Err(Error::SupplyCapExceeded);
+        }
+
         // Pull the escrowed funds from the sender into the contract.
         let token = storage::read_token(&env);
         let client = token::Client::new(&env, &token);
@@ -233,6 +289,7 @@ impl StreamPayContract {
 
         storage::write_stream(&env, id, &stream);
         storage::write_counter(&env, next);
+        storage::write_total_supply(&env, new_supply);
         storage::extend_instance(&env);
 
         events::stream_created(&env, id, &sender, &recipient, total_amount);
@@ -262,12 +319,23 @@ impl StreamPayContract {
 
         let new_total = stream.total.checked_add(amount).ok_or(Error::Overflow)?;
 
+        // Check the global supply cap before pulling additional tokens.
+        let current_supply = storage::read_total_supply(&env);
+        let new_supply = current_supply
+            .checked_add(amount)
+            .ok_or(Error::Overflow)?;
+        let cap = storage::read_supply_cap(&env);
+        if new_supply > cap {
+            return Err(Error::SupplyCapExceeded);
+        }
+
         let token = storage::read_token(&env);
         let client = token::Client::new(&env, &token);
         client.transfer(&sender, &env.current_contract_address(), &amount);
 
         stream.total = new_total;
         storage::write_stream(&env, id, &stream);
+        storage::write_total_supply(&env, new_supply);
         storage::extend_instance(&env);
 
         events::stream_topped_up(&env, id, &sender, amount, new_total);
@@ -454,6 +522,11 @@ impl StreamPayContract {
         let client = token::Client::new(&env, &token);
         client.transfer(&env.current_contract_address(), &recipient, &available);
 
+        // Tokens have left the contract; reduce the tracked supply.
+        let supply = storage::read_total_supply(&env);
+        let new_supply = supply.checked_sub(available).unwrap_or(0);
+        storage::write_total_supply(&env, new_supply);
+
         events::stream_withdrawn(&env, id, &recipient, available);
         Ok(available)
     }
@@ -497,6 +570,15 @@ impl StreamPayContract {
         if sender_refund > 0 {
             client.transfer(&contract, &stream.sender, &sender_refund);
         }
+
+        // Both payouts have left the contract; reduce the tracked supply by
+        // the entire remaining escrow (unvested + vested-but-unwithdrawn).
+        let released = recipient_paid
+            .checked_add(sender_refund)
+            .unwrap_or(sender_refund);
+        let supply = storage::read_total_supply(&env);
+        let new_supply = supply.checked_sub(released).unwrap_or(0);
+        storage::write_total_supply(&env, new_supply);
 
         events::stream_cancelled(&env, id, &caller, sender_refund, recipient_paid);
         Ok(())

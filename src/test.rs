@@ -822,4 +822,193 @@ fn test_create_stream_zero_start_rejects_end_before_now() {
         .contract
         .try_create_stream(&s.sender, &s.recipient, &1_000, &0, &500);
     assert_eq!(res, Err(Ok(Error::InvalidTimeRange)));
+// --- Supply cap tests -------------------------------------------------------
+
+#[test]
+fn test_default_supply_cap_is_i128_max() {
+    let s = setup();
+    assert_eq!(s.contract.get_supply_cap(), i128::MAX);
+}
+
+#[test]
+fn test_initial_total_supply_is_zero() {
+    let s = setup();
+    assert_eq!(s.contract.get_total_supply(), 0);
+}
+
+#[test]
+fn test_create_stream_increases_total_supply() {
+    let s = setup();
+    s.contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    assert_eq!(s.contract.get_total_supply(), 1_000);
+}
+
+#[test]
+fn test_multiple_streams_accumulate_supply() {
+    let s = setup();
+    s.contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    s.contract
+        .create_stream(&s.sender, &s.recipient, &2_000, &300, &400);
+    assert_eq!(s.contract.get_total_supply(), 3_000);
+}
+
+#[test]
+fn test_top_up_increases_total_supply() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    s.contract.top_up(&id, &s.sender, &500);
+    assert_eq!(s.contract.get_total_supply(), 1_500);
+}
+
+#[test]
+fn test_withdraw_decreases_total_supply() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    assert_eq!(s.contract.get_total_supply(), 1_000);
+
+    set_time(&s.env, 150); // midpoint — 500 vested
+    s.contract.withdraw(&id, &s.recipient);
+    assert_eq!(s.contract.get_total_supply(), 500);
+}
+
+#[test]
+fn test_cancel_decreases_total_supply_to_zero() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    set_time(&s.env, 150);
+    s.contract.cancel(&id, &s.sender);
+    // Both halves have left the contract.
+    assert_eq!(s.contract.get_total_supply(), 0);
+}
+
+#[test]
+fn test_set_supply_cap_by_admin_succeeds() {
+    let s = setup();
+    s.contract.set_supply_cap(&5_000);
+    assert_eq!(s.contract.get_supply_cap(), 5_000);
+}
+
+#[test]
+fn test_set_supply_cap_zero_fails() {
+    let s = setup();
+    let res = s.contract.try_set_supply_cap(&0);
+    assert_eq!(res, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn test_set_supply_cap_negative_fails() {
+    let s = setup();
+    let res = s.contract.try_set_supply_cap(&-1);
+    assert_eq!(res, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn test_create_stream_blocked_by_supply_cap() {
+    let s = setup();
+    // Cap is exactly 500; a 1_000-token stream must be rejected.
+    s.contract.set_supply_cap(&500);
+    let res = s
+        .contract
+        .try_create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    assert_eq!(res, Err(Ok(Error::SupplyCapExceeded)));
+}
+
+#[test]
+fn test_create_stream_at_exact_cap_succeeds() {
+    let s = setup();
+    s.contract.set_supply_cap(&1_000);
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    assert_eq!(id, 0);
+    assert_eq!(s.contract.get_total_supply(), 1_000);
+}
+
+#[test]
+fn test_create_stream_one_over_cap_fails() {
+    let s = setup();
+    s.contract.set_supply_cap(&999);
+    let res = s
+        .contract
+        .try_create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    assert_eq!(res, Err(Ok(Error::SupplyCapExceeded)));
+}
+
+#[test]
+fn test_top_up_blocked_by_supply_cap() {
+    let s = setup();
+    // Allow the first stream, then tighten the cap so top-up is blocked.
+    s.contract.set_supply_cap(&1_500);
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    // 501 more would bring total to 1_501, exceeding the cap of 1_500.
+    let res = s.contract.try_top_up(&id, &s.sender, &501);
+    assert_eq!(res, Err(Ok(Error::SupplyCapExceeded)));
+}
+
+#[test]
+fn test_top_up_at_exact_remaining_cap_succeeds() {
+    let s = setup();
+    s.contract.set_supply_cap(&1_500);
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    // Exactly 500 more brings total to 1_500 == cap: should succeed.
+    let new_total = s.contract.top_up(&id, &s.sender, &500);
+    assert_eq!(new_total, 1_500);
+    assert_eq!(s.contract.get_total_supply(), 1_500);
+}
+
+#[test]
+fn test_supply_recovers_after_cancel_allowing_new_stream() {
+    let s = setup();
+    s.contract.set_supply_cap(&1_000);
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    // At the cap — no new stream allowed.
+    assert_eq!(
+        s.contract
+            .try_create_stream(&s.sender, &s.recipient, &1, &300, &400),
+        Err(Ok(Error::SupplyCapExceeded))
+    );
+    // Cancel frees the entire escrow.
+    set_time(&s.env, 100);
+    s.contract.cancel(&id, &s.sender);
+    assert_eq!(s.contract.get_total_supply(), 0);
+    // Now a new stream fits within the cap.
+    s.token_admin.mint(&s.sender, &1_000);
+    let new_id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &300, &400);
+    assert_eq!(new_id, 1);
+}
+
+#[test]
+fn test_supply_recovers_after_full_withdraw_allowing_new_stream() {
+    let s = setup();
+    s.contract.set_supply_cap(&1_000);
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    set_time(&s.env, 300); // past end — fully vested
+    s.contract.withdraw(&id, &s.recipient);
+    assert_eq!(s.contract.get_total_supply(), 0);
+
+    // Supply freed; a new stream should be accepted.
+    s.token_admin.mint(&s.sender, &1_000);
+    let new_id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &500, &400, &500);
+    assert_eq!(new_id, 1);
+    assert_eq!(s.contract.get_total_supply(), 500);
 }

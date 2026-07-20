@@ -39,4 +39,6 @@ pub enum Error {
     TimelockNotExpired = 15,
     /// The requested admin action would not change contract administration.
     InvalidAdminAction = 16,
+    /// The operation would push the total escrowed supply above the global cap.
+    SupplyCapExceeded = 14,
 }
