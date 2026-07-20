@@ -53,3 +53,7 @@ doc:
 .PHONY: clean
 clean:
 	cargo clean
+
+.PHONY: coverage
+coverage:
+	cargo tarpaulin
