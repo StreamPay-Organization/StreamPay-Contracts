@@ -4,6 +4,9 @@ StreamPay is a real-time payment-streaming smart contract for the
 [Stellar](https://stellar.org) network, written in Rust with the
 [Soroban SDK](https://developers.stellar.org/docs/build/smart-contracts).
 
+The contract pins Soroban SDK 22.0.11 to keep contract builds reproducible. Update
+both the runtime and development dependency declarations together when upgrading.
+
 A sender escrows a fixed amount of a token and the contract releases it to a
 recipient **linearly over a time window**. The recipient can withdraw the
 vested portion at any time, and either party can cancel an active stream to
