@@ -26,6 +26,9 @@ pub mod types;
 mod vesting;
 
 #[cfg(test)]
+pub mod test_helpers;
+
+#[cfg(test)]
 mod test;
 
 use crate::error::Error;
