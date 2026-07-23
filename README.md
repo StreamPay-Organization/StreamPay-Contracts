@@ -195,6 +195,9 @@ Once a stream leaves the `Active` status it is terminal: `top_up` and
 - `withdrawn` only ever increases and never exceeds `total`.
 - All token math is checked, so an overflow returns `Overflow` rather than
   wrapping.
+- Batch escrow totals and cancellation payout splits use saturating aggregate
+  helpers in `src/aggregate.rs` that return `Overflow` instead of silently
+  clamping (see [ADR 0026](docs/adr/0026-prefer-saturating-math-for-aggregates.md)).
 
 ## Resource Costs
 

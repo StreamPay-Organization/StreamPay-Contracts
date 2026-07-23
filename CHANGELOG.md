@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `aggregate` module with saturating fallbacks for batch escrow totals, counter
+  bumps, and cancellation payout splits. Aggregate sums use saturating addition
+  internally and return `Overflow` when the true result would exceed the type
+  range, replacing silent `unwrap_or` fallbacks on payout totals.
 - `normalize` module with input normalization helpers. `normalize_start_time`
   lets callers pass `0` as `create_stream`'s `start_time` as shorthand for the
   current ledger timestamp, and `clamp_to_window` clamps a timestamp into a

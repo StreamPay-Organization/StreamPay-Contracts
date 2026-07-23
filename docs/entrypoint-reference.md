@@ -91,3 +91,8 @@ sender. `requests` is a Soroban `Vec<StreamRequest>`; each request contains a
 recipient, amount, start time, and end time. The operation requires the
 sender's authorization once, validates the complete batch before escrow, and
 returns the consecutive stream IDs. An empty or invalid batch fails atomically.
+
+The contract sums request amounts and the counter bump with saturating
+aggregate helpers ([`add_i128`](../src/aggregate.rs), [`add_u64`](../src/aggregate.rs));
+if either sum would exceed its type range the call returns `Overflow` with no
+streams created and no token transfer.

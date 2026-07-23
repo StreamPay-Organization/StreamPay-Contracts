@@ -17,6 +17,7 @@
 //! linearly to a recipient over a time window. The recipient can withdraw the
 //! vested portion at any time, and either party can cancel an active stream.
 
+mod aggregate;
 pub mod constants;
 pub mod error;
 mod events;
@@ -382,15 +383,13 @@ impl StreamPayContract {
             if request.end_time <= now {
                 return Err(Error::EndTimeInPast);
             }
-            aggregate_amount = aggregate_amount
-                .checked_add(request.total_amount)
-                .ok_or(Error::Overflow)?;
+            aggregate_amount = aggregate::add_i128(aggregate_amount, request.total_amount)?;
             index += 1;
         }
 
         let count = requests.len() as u64;
         let first_id = storage::read_counter(&env);
-        let next_counter = first_id.checked_add(count).ok_or(Error::Overflow)?;
+        let next_counter = aggregate::add_u64(first_id, count)?;
 
         let token = storage::read_token(&env);
         token::Client::new(&env, &token).transfer(
@@ -698,9 +697,7 @@ impl StreamPayContract {
 
         // Both payouts have left the contract; reduce the tracked supply by
         // the entire remaining escrow (unvested + vested-but-unwithdrawn).
-        let released = recipient_paid
-            .checked_add(sender_refund)
-            .unwrap_or(sender_refund);
+        let released = aggregate::add_i128(recipient_paid, sender_refund)?;
         let supply = storage::read_total_supply(&env);
         let new_supply = supply.checked_sub(released).unwrap_or(0);
         storage::write_total_supply(&env, new_supply);

@@ -49,3 +49,11 @@ total_supply == Σ stream.total - Σ stream.withdrawn  (across all non-terminal 
 - `cancel` decrements `total_supply` by `recipient_paid + sender_refund` (i.e., the entire released escrow).
 - The `supply_cap` is set to `i128::MAX` on initialization (effectively unlimited) and can be lowered or raised by the admin at any time via `set_supply_cap`.
 - Tightening the cap below the current `total_supply` does not disturb existing streams but blocks new escrowing until supply drops back below the cap.
+
+## Aggregate arithmetic
+
+Batch escrow totals, stream-counter bumps, and cancellation payout splits are
+summed through the [`aggregate`](../src/aggregate.rs) helpers (`add_i128`,
+`add_u64`). Each uses saturating addition internally and returns `Overflow`
+when the true sum would exceed the type range; aggregate paths never silently
+clamp or drop operands (see [ADR 0026](adr/0026-prefer-saturating-math-for-aggregates.md)).
