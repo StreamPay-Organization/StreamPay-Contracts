@@ -49,3 +49,21 @@ total_supply == Σ stream.total - Σ stream.withdrawn  (across all non-terminal 
 - `cancel` decrements `total_supply` by `recipient_paid + sender_refund` (i.e., the entire released escrow).
 - The `supply_cap` is set to `i128::MAX` on initialization (effectively unlimited) and can be lowered or raised by the admin at any time via `set_supply_cap`.
 - Tightening the cap below the current `total_supply` does not disturb existing streams but blocks new escrowing until supply drops back below the cap.
+
+## Per-account operation limit invariant
+
+Each sender account tracks how many streams it currently holds in the `Active`
+status:
+
+```
+account_op_count(sender) == count of Active streams where stream.sender == sender
+```
+
+- `create_stream` and `create_stream_batch` reserve one slot per new stream for
+  the sender and fail with `OperationLimitExceeded` when
+  `account_op_count + new_streams > operation_limit`.
+- `cancel` and a completing `withdraw` release one slot for the stream's sender.
+- The `operation_limit` defaults to `u32::MAX` on initialization (effectively
+  unlimited) and can be adjusted by the admin via `set_operation_limit`.
+- Lowering the limit below a sender's current count does not cancel existing
+  streams but blocks that sender from opening new ones until slots are released.

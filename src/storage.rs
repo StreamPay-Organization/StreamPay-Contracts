@@ -39,6 +39,11 @@ pub enum DataKey {
     /// The maximum value that `TotalSupply` may reach (instance).
     /// Set during `initialize` and adjustable by the admin afterwards.
     SupplyCap,
+    /// Maximum concurrent active streams any single sender may hold (instance).
+    OperationLimit,
+    /// Number of concurrent active streams currently held by an account
+    /// (persistent, keyed by sender address).
+    AccountOpCount(Address),
     /// A stream stored by its id (persistent).
     Stream(u64),
 }
@@ -167,4 +172,40 @@ pub fn read_supply_cap(env: &Env) -> i128 {
 /// Writes the supply cap into instance storage.
 pub fn write_supply_cap(env: &Env, cap: i128) {
     env.storage().instance().set(&DataKey::SupplyCap, &cap);
+}
+
+// ---------------------------------------------------------------------------
+// Per-account operation limit helpers
+// ---------------------------------------------------------------------------
+
+/// Reads the per-account active-stream limit, defaulting to unlimited.
+pub fn read_operation_limit(env: &Env) -> u32 {
+    env.storage()
+        .instance()
+        .get(&DataKey::OperationLimit)
+        .unwrap_or(u32::MAX)
+}
+
+/// Writes the per-account active-stream limit into instance storage.
+pub fn write_operation_limit(env: &Env, limit: u32) {
+    env.storage()
+        .instance()
+        .set(&DataKey::OperationLimit, &limit);
+}
+
+/// Reads how many active streams an account currently holds as sender.
+pub fn read_account_op_count(env: &Env, account: &Address) -> u32 {
+    env.storage()
+        .persistent()
+        .get(&DataKey::AccountOpCount(account.clone()))
+        .unwrap_or(0)
+}
+
+/// Writes an account's active-stream count into persistent storage.
+pub fn write_account_op_count(env: &Env, account: &Address, count: u32) {
+    let key = DataKey::AccountOpCount(account.clone());
+    env.storage().persistent().set(&key, &count);
+    env.storage()
+        .persistent()
+        .extend_ttl(&key, BUMP_THRESHOLD, BUMP_EXTEND);
 }

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Per-account operation limit: senders may hold at most `get_operation_limit()`
+  concurrent active streams. The admin configures the cap via
+  `set_operation_limit`; slots are released on cancellation or full withdrawal.
+- `account_ops` module implementing slot reservation and release.
 - `normalize` module with input normalization helpers. `normalize_start_time`
   lets callers pass `0` as `create_stream`'s `start_time` as shorthand for the
   current ledger timestamp, and `clamp_to_window` clamps a timestamp into a

@@ -17,6 +17,7 @@
 //! linearly to a recipient over a time window. The recipient can withdraw the
 //! vested portion at any time, and either party can cancel an active stream.
 
+mod account_ops;
 pub mod constants;
 pub mod error;
 mod events;
@@ -47,7 +48,7 @@ contractmeta!(key = "version", val = "0.2.0");
 /// access through the crate root.
 pub use crate::constants::{ADMIN_TIMELOCK_DELAY, MIN_STREAM_AMOUNT};
 
-use crate::constants::{is_valid_amount, DEFAULT_SUPPLY_CAP};
+use crate::constants::{is_valid_amount, DEFAULT_OPERATION_LIMIT, DEFAULT_SUPPLY_CAP};
 
 /// The StreamPay contract type.
 #[contract]
@@ -68,6 +69,7 @@ impl StreamPayContract {
         storage::write_counter(&env, 0);
         storage::write_total_supply(&env, 0);
         storage::write_supply_cap(&env, DEFAULT_SUPPLY_CAP);
+        storage::write_operation_limit(&env, DEFAULT_OPERATION_LIMIT);
         storage::extend_instance(&env);
         Ok(())
     }
@@ -266,6 +268,43 @@ impl StreamPayContract {
         Ok(())
     }
 
+    /// Returns the maximum number of concurrent active streams a single sender
+    /// may hold.
+    pub fn get_operation_limit(env: Env) -> u32 {
+        storage::read_operation_limit(&env)
+    }
+
+    /// Returns how many concurrent active streams `account` currently holds as
+    /// sender.
+    pub fn get_account_operation_count(env: Env, account: Address) -> u32 {
+        storage::read_account_op_count(&env, &account)
+    }
+
+    /// Updates the per-account active-stream limit to `new_limit`.
+    ///
+    /// Only the admin may call this. `new_limit` must be positive (> 0).
+    /// Lowering the limit below an account's current active-stream count does
+    /// not cancel existing streams but blocks that account from opening new
+    /// ones until its count drops. Emits an `oplimitadmin` event on success.
+    pub fn set_operation_limit(env: Env, new_limit: u32) -> Result<(), Error> {
+        if !storage::has_admin(&env) {
+            return Err(Error::NotInitialized);
+        }
+        let admin = storage::read_admin(&env);
+        admin.require_auth();
+
+        if new_limit == 0 {
+            return Err(Error::InvalidAmount);
+        }
+
+        let old_limit = storage::read_operation_limit(&env);
+        storage::write_operation_limit(&env, new_limit);
+        storage::extend_instance(&env);
+
+        events::operation_limit_updated(&env, &admin, old_limit, new_limit);
+        Ok(())
+    }
+
     /// Returns the stream with the given `id`, or [`Error::StreamNotFound`].
     pub fn get_stream(env: Env, id: u64) -> Result<Stream, Error> {
         storage::read_stream(&env, id).ok_or(Error::StreamNotFound)
@@ -317,6 +356,8 @@ impl StreamPayContract {
         if new_supply > cap {
             return Err(Error::SupplyCapExceeded);
         }
+
+        account_ops::reserve_slots(&env, &sender, 1)?;
 
         // Pull the escrowed funds from the sender into the contract.
         let token = storage::read_token(&env);
@@ -387,6 +428,8 @@ impl StreamPayContract {
                 .ok_or(Error::Overflow)?;
             index += 1;
         }
+
+        account_ops::reserve_slots(&env, &sender, requests.len())?;
 
         let count = requests.len() as u64;
         let first_id = storage::read_counter(&env);
@@ -643,6 +686,10 @@ impl StreamPayContract {
         }
         storage::write_stream(&env, id, &stream);
 
+        if stream.status == Status::Completed {
+            account_ops::release_slot(&env, &stream.sender);
+        }
+
         let token = storage::read_token(&env);
         let client = token::Client::new(&env, &token);
         client.transfer(&env.current_contract_address(), &recipient, &available);
@@ -685,6 +732,7 @@ impl StreamPayContract {
         stream.withdrawn = vested;
         stream.status = Status::Cancelled;
         storage::write_stream(&env, id, &stream);
+        account_ops::release_slot(&env, &stream.sender);
 
         let token = storage::read_token(&env);
         let client = token::Client::new(&env, &token);

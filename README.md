@@ -49,6 +49,12 @@ split the funds fairly between what has and has not yet vested.
 | `get_pending_admin() -> Option<Address>` | View: the queued replacement admin, if any. |
 | `get_admin_action_execute_after() -> Option<u64>` | View: timestamp at which the queued transfer can execute. |
 | `get_token() -> Address` | View: the streamed token address. |
+| `get_total_supply() -> i128` | View: tokens currently held in escrow across all active streams. |
+| `get_supply_cap() -> i128` | View: global cap on total escrowed supply. |
+| `set_supply_cap(new_cap)` | Admin-only: updates the global supply cap. |
+| `get_operation_limit() -> u32` | View: max concurrent active streams per sender. |
+| `get_account_operation_count(account) -> u32` | View: active streams currently held by `account` as sender. |
+| `set_operation_limit(new_limit)` | Admin-only: updates the per-account active-stream cap. |
 | `stream_counter() -> u64` | View: number of streams created so far. |
 
 ### Vesting
@@ -89,6 +95,8 @@ event name and the stream id.
 | `("admin_scheduled",)` | `(current_admin, pending_admin, execute_after)` | `schedule_admin_transfer` |
 | `("admin_transfer",)` | `(previous_admin, new_admin)` | `execute_admin_transfer` |
 | `("admin_cancelled",)` | `admin` | `cancel_admin_transfer` |
+| `("capadmin",)` | `(admin, old_cap, new_cap)` | `set_supply_cap` |
+| `("oplimitadmin",)` | `(admin, old_limit, new_limit)` | `set_operation_limit` |
 
 ## Admin timelock
 

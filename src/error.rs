@@ -43,4 +43,6 @@ pub enum Error {
     SupplyCapExceeded = 18,
     /// A batch entrypoint was called without any operations.
     EmptyBatch = 19,
+    /// The account already holds the maximum number of concurrent active streams.
+    OperationLimitExceeded = 20,
 }

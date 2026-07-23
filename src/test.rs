@@ -1251,6 +1251,172 @@ fn test_supply_recovers_after_full_withdraw_allowing_new_stream() {
     assert_eq!(s.contract.get_total_supply(), 500);
 }
 
+// --- Per-account operation limit tests --------------------------------------
+
+#[test]
+fn test_default_operation_limit_is_u32_max() {
+    let s = setup();
+    assert_eq!(s.contract.get_operation_limit(), u32::MAX);
+}
+
+#[test]
+fn test_initial_account_operation_count_is_zero() {
+    let s = setup();
+    assert_eq!(s.contract.get_account_operation_count(&s.sender), 0);
+}
+
+#[test]
+fn test_create_stream_increases_account_operation_count() {
+    let s = setup();
+    s.contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    assert_eq!(s.contract.get_account_operation_count(&s.sender), 1);
+}
+
+#[test]
+fn test_set_operation_limit_by_admin_succeeds() {
+    let s = setup();
+    s.contract.set_operation_limit(&5);
+    assert_eq!(s.contract.get_operation_limit(), 5);
+}
+
+#[test]
+fn test_set_operation_limit_zero_fails() {
+    let s = setup();
+    let res = s.contract.try_set_operation_limit(&0);
+    assert_eq!(res, Err(Ok(Error::InvalidAmount)));
+}
+
+#[test]
+fn test_create_stream_blocked_by_operation_limit() {
+    let s = setup();
+    s.contract.set_operation_limit(&1);
+    s.contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    let res = s
+        .contract
+        .try_create_stream(&s.sender, &s.recipient, &500, &300, &400);
+    assert_eq!(res, Err(Ok(Error::OperationLimitExceeded)));
+}
+
+#[test]
+fn test_create_stream_at_exact_operation_limit_succeeds() {
+    let s = setup();
+    s.contract.set_operation_limit(&2);
+    s.contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &500, &300, &400);
+    assert_eq!(id, 1);
+    assert_eq!(s.contract.get_account_operation_count(&s.sender), 2);
+}
+
+#[test]
+fn test_create_stream_one_over_operation_limit_fails() {
+    let s = setup();
+    s.contract.set_operation_limit(&1);
+    s.contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    let res = s
+        .contract
+        .try_create_stream(&s.sender, &s.recipient, &500, &300, &400);
+    assert_eq!(res, Err(Ok(Error::OperationLimitExceeded)));
+}
+
+#[test]
+fn test_create_stream_batch_respects_operation_limit() {
+    let s = setup();
+    s.contract.set_operation_limit(&2);
+    let requests = Vec::from_array(
+        &s.env,
+        [
+            StreamRequest {
+                recipient: s.recipient.clone(),
+                total_amount: 1_000,
+                start_time: 100,
+                end_time: 200,
+            },
+            StreamRequest {
+                recipient: Address::generate(&s.env),
+                total_amount: 500,
+                start_time: 100,
+                end_time: 200,
+            },
+        ],
+    );
+    s.contract.create_stream_batch(&s.sender, &requests);
+    assert_eq!(s.contract.get_account_operation_count(&s.sender), 2);
+}
+
+#[test]
+fn test_create_stream_batch_rejects_operation_limit_atomically() {
+    let s = setup();
+    s.contract.set_operation_limit(&1);
+    s.contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    let requests = Vec::from_array(
+        &s.env,
+        [
+            StreamRequest {
+                recipient: Address::generate(&s.env),
+                total_amount: 500,
+                start_time: 100,
+                end_time: 200,
+            },
+            StreamRequest {
+                recipient: Address::generate(&s.env),
+                total_amount: 500,
+                start_time: 100,
+                end_time: 200,
+            },
+        ],
+    );
+    assert_eq!(
+        s.contract.try_create_stream_batch(&s.sender, &requests),
+        Err(Ok(Error::OperationLimitExceeded))
+    );
+    assert_eq!(s.contract.get_account_operation_count(&s.sender), 1);
+    assert_eq!(s.contract.stream_counter(), 1);
+}
+
+#[test]
+fn test_operation_limit_recovers_after_cancel_allowing_new_stream() {
+    let s = setup();
+    s.contract.set_operation_limit(&1);
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    assert_eq!(
+        s.contract
+            .try_create_stream(&s.sender, &s.recipient, &500, &300, &400),
+        Err(Ok(Error::OperationLimitExceeded))
+    );
+    set_time(&s.env, 100);
+    s.contract.cancel(&id, &s.sender);
+    assert_eq!(s.contract.get_account_operation_count(&s.sender), 0);
+    let new_id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &500, &300, &400);
+    assert_eq!(new_id, 1);
+}
+
+#[test]
+fn test_operation_limit_recovers_after_full_withdraw_allowing_new_stream() {
+    let s = setup();
+    s.contract.set_operation_limit(&1);
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    set_time(&s.env, 300);
+    s.contract.withdraw(&id, &s.recipient);
+    assert_eq!(s.contract.get_account_operation_count(&s.sender), 0);
+    let new_id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &500, &400, &500);
+    assert_eq!(new_id, 1);
+}
+
 // --- README content contract -----------------------------------------------
 
 /// Verify that the README contains a "Resource Costs" section.

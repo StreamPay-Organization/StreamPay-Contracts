@@ -37,6 +37,14 @@ pub const MIN_VALID_AMOUNT: i128 = 1;
 /// be intentionally tightened by the admin.
 pub const DEFAULT_SUPPLY_CAP: i128 = i128::MAX;
 
+/// Default maximum number of concurrent active streams a single sender account
+/// may hold.
+///
+/// The admin may lower or raise this through
+/// [`crate::StreamPayContract::set_operation_limit`]. Set to `u32::MAX` so the
+/// limit is effectively disabled by default.
+pub const DEFAULT_OPERATION_LIMIT: u32 = u32::MAX;
+
 /// Error variants returned when a proposed amount violates the contract's
 /// limits.
 ///

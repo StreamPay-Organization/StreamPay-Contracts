@@ -8,7 +8,8 @@ This document describes all public entrypoints of the `streampay-contract`.
 
 One-shot setup. Stores the admin address, the SAC token address, initializes
 the stream counter to `0`, sets `total_supply` to `0`, and seeds the
-`supply_cap` to `i128::MAX` (effectively unlimited). Returns
+`supply_cap` to `i128::MAX` (effectively unlimited) and the per-account
+`operation_limit` to `u32::MAX` (effectively unlimited). Returns
 `AlreadyInitialized` if called more than once.
 
 ## Admin operations
@@ -22,6 +23,14 @@ new `create_stream` and `top_up` calls until supply drops below the new cap.
 Emits a `capadmin` event. Returns `NotInitialized` if called before
 `initialize`.
 
+### `set_operation_limit(new_limit) → Result<(), Error>`
+
+Admin-only. Updates the maximum number of concurrent active streams any single
+sender may hold. `new_limit` must be positive. Lowering the limit below an
+account's current active-stream count does not cancel existing streams but
+blocks that account from opening new ones until slots are released through
+cancellation or full withdrawal. Emits an `oplimitadmin` event.
+
 ## Stream lifecycle
 
 ### `create_stream(sender, recipient, total_amount, start_time, end_time) → Result<u64, Error>`
@@ -34,6 +43,7 @@ Creates a new stream and escrows `total_amount` from `sender`. Requires
 - `InvalidTimeRange` — `end_time <= start_time`
 - `EndTimeInPast` — `end_time <= ledger.timestamp()`
 - `SupplyCapExceeded` — `total_supply + total_amount > supply_cap`
+- `OperationLimitExceeded` — sender already holds `operation_limit` active streams
 - `Overflow` — stream counter would overflow
 
 ### `top_up(id, sender, amount) → Result<i128, Error>`
@@ -71,6 +81,8 @@ of both payouts.
 | `stream_counter()` | `u64` | Number of streams created |
 | `get_total_supply()` | `i128` | Tokens currently in escrow across all active streams |
 | `get_supply_cap()` | `i128` | Current global supply cap |
+| `get_operation_limit()` | `u32` | Maximum concurrent active streams per sender |
+| `get_account_operation_count(account)` | `u32` | Active streams currently held by `account` as sender |
 | `get_stream(id)` | `Stream` | Raw stream struct |
 | `get_summary(id)` | `StreamSummary` | Bundled snapshot (total, vested, withdrawn, withdrawable, progress, status) |
 | `get_status(id)` | `Status` | Lifecycle status |

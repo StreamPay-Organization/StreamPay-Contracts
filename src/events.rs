@@ -90,6 +90,13 @@ pub fn supply_cap_updated(env: &Env, admin: &Address, old_cap: i128, new_cap: i1
     env.events()
         .publish(topics, (admin.clone(), old_cap, new_cap));
 }
+
+/// Publishes an `oplimitadmin` event when the admin changes the operation limit.
+pub fn operation_limit_updated(env: &Env, admin: &Address, old_limit: u32, new_limit: u32) {
+    let topics = (symbol_short!("oplimit"),);
+    env.events()
+        .publish(topics, (admin.clone(), old_limit, new_limit));
+}
 /// Publishes an `admin_set` event when the admin role is transferred.
 pub fn admin_changed(env: &Env, old_admin: &Address, new_admin: &Address) {
     let topics = (symbol_short!("admin_set"),);

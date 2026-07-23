@@ -292,6 +292,18 @@
                         "key": {
                           "vec": [
                             {
+                              "symbol": "OperationLimit"
+                            }
+                          ]
+                        },
+                        "val": {
+                          "u32": 4294967295
+                        }
+                      },
+                      {
+                        "key": {
+                          "vec": [
+                            {
                               "symbol": "SupplyCap"
                             }
                           ]
