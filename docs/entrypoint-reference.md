@@ -62,6 +62,38 @@ Distributes the vested-but-unwithdrawn portion to the recipient and the
 unvested remainder back to the sender. Decrements `total_supply` by the sum
 of both payouts.
 
+## Emergency operations
+
+### `emergency_withdraw(admin, stream_id, recipient) → Result<i128, Error>`
+
+Admin-only break-glass entrypoint. Drains a stream's entire remaining balance
+(`total - withdrawn`) to `recipient` immediately, bypassing normal vesting
+rules. Intended for use when funds are at risk and normal settlement paths are
+unavailable.
+
+Requires `admin` authorization. The admin chooses `recipient` — typically the
+original stream sender or a protocol treasury.
+
+**Behaviour:**
+- Computes `remaining = stream.total - stream.withdrawn`.
+- Returns `StreamAlreadySettled` if `remaining == 0` (stream fully settled).
+- Transfers `remaining` tokens to `recipient`.
+- Marks the stream `Cancelled` so subsequent `withdraw` / `cancel` calls fail
+  cleanly with `AlreadyCancelled`.
+- Decrements `total_supply` by `remaining`.
+- Emits an `emerg_wd` event: topics `("emerg_wd", stream_id)`, data
+  `(admin, recipient, amount)`.
+- Returns the amount drained.
+
+**Errors:**
+
+| Error | Condition |
+|---|---|
+| `NotInitialized` | Contract not yet initialized |
+| `Unauthorized` | Caller is not the current admin |
+| `StreamNotFound` | No stream exists for `stream_id` |
+| `StreamAlreadySettled` | `remaining == 0` — nothing left to drain |
+
 ## View entrypoints
 
 | Entrypoint | Returns | Description |

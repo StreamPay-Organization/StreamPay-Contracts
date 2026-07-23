@@ -1,3 +1,6 @@
 /target
 .deployed-hash*
 *.wasm
+
+# Soroban test snapshots (generated locally, not for version control)
+test_snapshots/

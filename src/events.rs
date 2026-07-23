@@ -102,3 +102,14 @@ pub fn contract_upgraded(env: &Env, new_wasm_hash: &soroban_sdk::BytesN<32>) {
     let topics = (symbol_short!("upgraded"),);
     env.events().publish(topics, new_wasm_hash.clone());
 }
+
+/// Publishes an `emerg_wd` event when the admin performs an emergency
+/// withdrawal on a stream.
+///
+/// `amount` is the balance drained from the stream and `recipient` is the
+/// address that received the funds.
+pub fn emergency_withdrawn(env: &Env, id: u64, admin: &Address, recipient: &Address, amount: i128) {
+    let topics = (symbol_short!("emerg_wd"), id);
+    env.events()
+        .publish(topics, (admin.clone(), recipient.clone(), amount));
+}
