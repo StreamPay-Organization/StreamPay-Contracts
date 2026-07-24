@@ -330,6 +330,37 @@ fn test_create_stream_batch_rejects_empty_batch() {
 }
 
 #[test]
+fn test_create_stream_batch_rejects_aggregate_overflow() {
+    let s = setup();
+    let half = i128::MAX / 2 + 1;
+    let requests = Vec::from_array(
+        &s.env,
+        [
+            StreamRequest {
+                recipient: s.recipient.clone(),
+                total_amount: half,
+                start_time: 100,
+                end_time: 200,
+            },
+            StreamRequest {
+                recipient: Address::generate(&s.env),
+                total_amount: half,
+                start_time: 100,
+                end_time: 200,
+            },
+        ],
+    );
+
+    assert_eq!(
+        s.contract.try_create_stream_batch(&s.sender, &requests),
+        Err(Ok(Error::Overflow))
+    );
+    assert_eq!(s.contract.stream_counter(), 0);
+    assert_eq!(s.token.balance(&s.sender), 1_000_000);
+    assert_eq!(s.token.balance(&s.contract.address), 0);
+}
+
+#[test]
 fn test_create_stream_rejects_zero_amount() {
     let s = setup();
     let res = s
