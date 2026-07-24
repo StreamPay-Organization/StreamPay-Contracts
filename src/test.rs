@@ -1552,3 +1552,187 @@ fn test_upgrade_requires_admin_auth() {
         }])
         .upgrade(&new_wasm_hash);
 }
+
+// --- Emergency withdrawal tests --------------------------------------------
+
+#[test]
+fn test_emergency_withdraw_drains_active_stream_to_recipient() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    // Admin drains the stream at the midpoint before any normal withdrawal.
+    set_time(&s.env, 150);
+    let treasury = Address::generate(&s.env);
+    let drained = s.contract.emergency_withdraw(&s.admin, &id, &treasury);
+
+    // The full escrowed balance (nothing withdrawn yet) goes to treasury.
+    assert_eq!(drained, 1_000);
+    assert_eq!(s.token.balance(&treasury), 1_000);
+    assert_eq!(s.token.balance(&s.contract.address), 0);
+}
+
+#[test]
+fn test_emergency_withdraw_marks_stream_cancelled() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    let treasury = Address::generate(&s.env);
+    s.contract.emergency_withdraw(&s.admin, &id, &treasury);
+
+    let stream = s.contract.get_stream(&id);
+    assert_eq!(stream.status, Status::Cancelled);
+}
+
+#[test]
+fn test_emergency_withdraw_decrements_total_supply() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+    assert_eq!(s.contract.get_total_supply(), 1_000);
+
+    let treasury = Address::generate(&s.env);
+    s.contract.emergency_withdraw(&s.admin, &id, &treasury);
+    assert_eq!(s.contract.get_total_supply(), 0);
+}
+
+#[test]
+fn test_emergency_withdraw_drains_only_remainder_after_partial_withdrawal() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    // Recipient withdraws 500 at the midpoint first.
+    set_time(&s.env, 150);
+    s.contract.withdraw(&id, &s.recipient);
+    assert_eq!(s.token.balance(&s.recipient), 500);
+
+    // Emergency withdrawal should only drain the remaining 500.
+    let treasury = Address::generate(&s.env);
+    let drained = s.contract.emergency_withdraw(&s.admin, &id, &treasury);
+
+    assert_eq!(drained, 500);
+    assert_eq!(s.token.balance(&treasury), 500);
+    assert_eq!(s.token.balance(&s.contract.address), 0);
+    assert_eq!(s.contract.get_total_supply(), 0);
+}
+
+#[test]
+fn test_emergency_withdraw_fails_on_unknown_stream() {
+    let s = setup();
+    let treasury = Address::generate(&s.env);
+    let res = s.contract.try_emergency_withdraw(&s.admin, &99, &treasury);
+    assert_eq!(res, Err(Ok(Error::StreamNotFound)));
+}
+
+#[test]
+fn test_emergency_withdraw_fails_when_nothing_remains() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    // Fully withdraw after the stream ends, completing it.
+    set_time(&s.env, 300);
+    s.contract.withdraw(&id, &s.recipient);
+    assert_eq!(s.contract.get_stream(&id).status, Status::Completed);
+
+    // Nothing is left to drain.
+    let treasury = Address::generate(&s.env);
+    let res = s.contract.try_emergency_withdraw(&s.admin, &id, &treasury);
+    assert_eq!(res, Err(Ok(Error::StreamAlreadySettled)));
+}
+
+#[test]
+fn test_emergency_withdraw_fails_when_stream_already_cancelled_with_zero_balance() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    // Cancel at the end so the entire balance is distributed.
+    set_time(&s.env, 200);
+    s.contract.cancel(&id, &s.sender);
+
+    let treasury = Address::generate(&s.env);
+    let res = s.contract.try_emergency_withdraw(&s.admin, &id, &treasury);
+    assert_eq!(res, Err(Ok(Error::StreamAlreadySettled)));
+}
+
+#[test]
+fn test_emergency_withdraw_requires_admin_auth() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    let stranger = Address::generate(&s.env);
+    let treasury = Address::generate(&s.env);
+
+    // A non-admin caller must be rejected.
+    let res = s.contract.try_emergency_withdraw(&stranger, &id, &treasury);
+    assert_eq!(res, Err(Ok(Error::Unauthorized)));
+}
+
+#[test]
+fn test_emergency_withdraw_emits_event() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    let treasury = Address::generate(&s.env);
+    s.contract.emergency_withdraw(&s.admin, &id, &treasury);
+
+    let events = contract_events(&s.env, &s.contract.address);
+    // The last event must be the emerg_wd event.
+    let last = events.last().expect("expected at least one event");
+    let expected_topics = Vec::from_array(
+        &s.env,
+        [
+            Symbol::new(&s.env, "emerg_wd").into_val(&s.env),
+            id.into_val(&s.env),
+        ],
+    );
+    assert_eq!(last.0, expected_topics);
+    assert!(val_eq(
+        &s.env,
+        last.1,
+        (s.admin.clone(), treasury.clone(), 1_000_i128).into_val(&s.env)
+    ));
+}
+
+#[test]
+fn test_emergency_withdraw_blocks_subsequent_normal_withdraw() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    let treasury = Address::generate(&s.env);
+    s.contract.emergency_withdraw(&s.admin, &id, &treasury);
+
+    // Stream is now Cancelled — normal withdraw must be rejected.
+    set_time(&s.env, 200);
+    let res = s.contract.try_withdraw(&id, &s.recipient);
+    assert_eq!(res, Err(Ok(Error::AlreadyCancelled)));
+}
+
+#[test]
+fn test_emergency_withdraw_before_initialize_fails() {
+    let env = Env::default();
+    env.mock_all_auths();
+
+    let contract_id = env.register(StreamPayContract, ());
+    let contract = StreamPayContractClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let treasury = Address::generate(&env);
+    let res = contract.try_emergency_withdraw(&admin, &0, &treasury);
+    assert_eq!(res, Err(Ok(Error::NotInitialized)));
+}

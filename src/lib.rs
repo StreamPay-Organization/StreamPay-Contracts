@@ -705,4 +705,74 @@ impl StreamPayContract {
         events::stream_cancelled(&env, id, &caller, sender_refund, recipient_paid);
         Ok(())
     }
+
+    /// Emergency withdrawal — admin drains a stream's entire remaining balance
+    /// to `recipient`.
+    ///
+    /// This is a break-glass mechanism intended for use when funds are at risk
+    /// (e.g., after discovering a vulnerability or a stream whose parties are
+    /// unresponsive). It bypasses normal vesting rules and settles the stream
+    /// immediately.
+    ///
+    /// # Authorization
+    /// Only the current admin may call this; the call must carry the admin's
+    /// authorization.
+    ///
+    /// # Behaviour
+    /// * Computes the stream's remaining balance as `total - withdrawn`.
+    /// * Transfers that balance to `recipient` (typically the original sender
+    ///   or a protocol treasury — chosen by the admin).
+    /// * Marks the stream `Cancelled` so subsequent `withdraw` / `cancel`
+    ///   calls fail cleanly.
+    /// * Decrements `total_supply` by the amount transferred.
+    /// * Emits an `emerg_wd` event for indexer auditability.
+    ///
+    /// Returns `StreamAlreadySettled` when the stream has no remaining balance
+    /// (e.g., it was already fully withdrawn or cancelled with nothing left).
+    pub fn emergency_withdraw(
+        env: Env,
+        admin: Address,
+        stream_id: u64,
+        recipient: Address,
+    ) -> Result<i128, Error> {
+        if !storage::has_admin(&env) {
+            return Err(Error::NotInitialized);
+        }
+        admin.require_auth();
+        if admin != storage::read_admin(&env) {
+            return Err(Error::Unauthorized);
+        }
+
+        let mut stream = storage::read_stream(&env, stream_id).ok_or(Error::StreamNotFound)?;
+
+        // The remaining balance is whatever has been escrowed but not yet paid
+        // out, regardless of how much has technically "vested".
+        let remaining = stream
+            .total
+            .checked_sub(stream.withdrawn)
+            .ok_or(Error::Overflow)?;
+
+        if remaining <= 0 {
+            return Err(Error::StreamAlreadySettled);
+        }
+
+        // Mark the stream cancelled so normal paths reject further operations.
+        stream.withdrawn = stream.total;
+        stream.status = Status::Cancelled;
+        storage::write_stream(&env, stream_id, &stream);
+
+        // Transfer the remaining balance to the admin-designated recipient.
+        let token = storage::read_token(&env);
+        let client = token::Client::new(&env, &token);
+        client.transfer(&env.current_contract_address(), &recipient, &remaining);
+
+        // Reflect the outflow in the global supply tracker.
+        let supply = storage::read_total_supply(&env);
+        let new_supply = supply.checked_sub(remaining).unwrap_or(0);
+        storage::write_total_supply(&env, new_supply);
+
+        storage::extend_instance(&env);
+        events::emergency_withdrawn(&env, stream_id, &admin, &recipient, remaining);
+        Ok(remaining)
+    }
 }

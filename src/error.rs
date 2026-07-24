@@ -43,4 +43,6 @@ pub enum Error {
     SupplyCapExceeded = 18,
     /// A batch entrypoint was called without any operations.
     EmptyBatch = 19,
+    /// The stream has no remaining balance to drain (already fully settled).
+    StreamAlreadySettled = 20,
 }
