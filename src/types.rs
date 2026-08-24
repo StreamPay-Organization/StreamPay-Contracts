@@ -57,6 +57,23 @@ pub struct StreamSummary {
 ///
 /// Tokens vest linearly from `start` to `end`. The escrowed `total` is held by
 /// the contract; `withdrawn` tracks how much the recipient has already pulled.
+///
+/// ## Schedule mutation and the accrual checkpoint
+///
+/// `accrued` and `accrued_at` form a checkpoint that pins already-vested funds
+/// whenever the schedule is mutated (e.g. `extend_stream`).  The vesting math
+/// is split into two segments:
+///
+/// ```text
+/// vested(now) = accrued + linear(accrued_at..end, total - accrued, now)
+/// ```
+///
+/// On creation both fields are `0`, so the formula reduces to the simple
+/// linear case.  On each `extend_stream` the contract snapshots the current
+/// vested amount into `accrued` and records `now` as `accrued_at`, ensuring
+/// that pushing the end time forward never reduces what has already vested.
+/// This guarantees `withdrawable` is monotonically non-decreasing over time
+/// and that `vested - withdrawn >= 0` always holds.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Stream {
@@ -74,4 +91,15 @@ pub struct Stream {
     pub end: u64,
     /// The current lifecycle status of the stream.
     pub status: Status,
+    /// Amount locked in as already-vested at the last schedule mutation.
+    ///
+    /// On creation this is `0`.  It is set to `vested(now)` whenever the
+    /// schedule is mutated (e.g. `extend_stream`) so that past vesting is
+    /// never recalculated under a new window.
+    pub accrued: i128,
+    /// Ledger timestamp at which `accrued` was last snapshotted.
+    ///
+    /// Linear vesting for the remaining `total - accrued` runs from this
+    /// point to `end`.  On creation this equals `start`.
+    pub accrued_at: u64,
 }

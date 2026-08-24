@@ -1736,3 +1736,320 @@ fn test_emergency_withdraw_before_initialize_fails() {
     let res = contract.try_emergency_withdraw(&admin, &0, &treasury);
     assert_eq!(res, Err(Ok(Error::NotInitialized)));
 }
+
+// ---------------------------------------------------------------------------
+// Regression: extend_stream must not reduce withdrawable (original bug)
+// ---------------------------------------------------------------------------
+
+/// Regression test for the original failure mode:
+///
+/// Before the accrual-checkpoint fix, extending a stream's end time would
+/// recalculate `vested` using the new, longer window, silently reducing the
+/// vested amount.  If the recipient had already withdrawn up to the old vested
+/// amount, `vested - withdrawn` would become negative and `withdrawable` would
+/// return an error or silently return 0.
+///
+/// After the fix, `vested` at the checkpoint time is pinned, so the already-
+/// earned portion is never lost.
+#[test]
+fn test_extend_does_not_reduce_withdrawable_regression() {
+    let s = setup();
+    // Stream: 1_000 tokens from t=100 to t=200 (100-second window).
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    // At t=150 (midpoint) exactly 500 tokens have vested.
+    set_time(&s.env, 150);
+    assert_eq!(s.contract.streamed_amount(&id), 500);
+
+    // Now extend the end to t=300.  Without the fix, `vested(150)` using the
+    // new 200-second window would be 1_000 * 50/200 = 250, halving what was
+    // earned.  With the fix it must remain >= 500.
+    s.contract.extend_stream(&id, &s.sender, &300);
+
+    // Withdrawable must be at least 500 — the amount already earned.
+    let withdrawable = s.contract.withdrawable_amount(&id);
+    assert!(
+        withdrawable >= 500,
+        "extend_stream reduced withdrawable from 500 to {withdrawable}"
+    );
+}
+
+/// After extending a stream, the recipient can still withdraw everything that
+/// was vested at the moment of extension.
+#[test]
+fn test_withdraw_after_extend_pays_accrued_amount() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    // 500 tokens have vested at the midpoint.
+    set_time(&s.env, 150);
+
+    // Extend before withdrawing — the accrual checkpoint must pin the 500.
+    s.contract.extend_stream(&id, &s.sender, &300);
+
+    // The recipient withdraws immediately after the extension.
+    let paid = s.contract.withdraw(&id, &s.recipient);
+    assert_eq!(paid, 500, "recipient should receive the 500 accrued pre-extension");
+    assert_eq!(s.token.balance(&s.recipient), 500);
+}
+
+/// Monotonicity: `vested` must never decrease as time advances, including
+/// across an `extend_stream` call.
+#[test]
+fn test_vested_is_monotonic_across_extend() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    let checkpoints: &[(u64, bool)] = &[
+        (100, false), // before extension
+        (130, false),
+        (150, true),  // extend at this point
+        (170, false),
+        (200, false),
+        (250, false),
+        (300, false),
+    ];
+
+    let mut prev_vested: i128 = 0;
+    for &(t, do_extend) in checkpoints {
+        set_time(&s.env, t);
+        if do_extend {
+            s.contract.extend_stream(&id, &s.sender, &300);
+        }
+        let v = s.contract.streamed_amount(&id);
+        assert!(
+            v >= prev_vested,
+            "vested decreased from {prev_vested} to {v} at t={t}"
+        );
+        prev_vested = v;
+    }
+    // Must have reached the full total by the new end.
+    assert_eq!(prev_vested, 1_000);
+}
+
+/// Invariant: `vested + unvested == total` must hold at every point in time.
+#[test]
+fn test_vested_plus_unvested_equals_total() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    for t in [50u64, 100, 125, 150, 175, 200, 250] {
+        set_time(&s.env, t);
+        let v = s.contract.streamed_amount(&id);
+        let u = s.contract.remaining_amount(&id);
+        assert_eq!(
+            v + u,
+            1_000,
+            "vested({v}) + unvested({u}) != 1_000 at t={t}"
+        );
+    }
+}
+
+/// Invariant: `withdrawable <= total - withdrawn` at all times.
+#[test]
+fn test_withdrawable_never_exceeds_funded_minus_withdrawn() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    for t in [100u64, 125, 150, 175, 200, 250] {
+        set_time(&s.env, t);
+        let stream = s.contract.get_stream(&id);
+        let w = s.contract.withdrawable_amount(&id);
+        let max = stream.total - stream.withdrawn;
+        assert!(
+            w <= max,
+            "withdrawable({w}) > total - withdrawn({max}) at t={t}"
+        );
+    }
+}
+
+/// Boundary: vested at exactly `start` must be 0; at exactly `end` must be
+/// `total`.
+#[test]
+fn test_vested_at_exact_boundaries() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    set_time(&s.env, 100);
+    assert_eq!(s.contract.streamed_amount(&id), 0);
+
+    set_time(&s.env, 200);
+    assert_eq!(s.contract.streamed_amount(&id), 1_000);
+}
+
+/// Boundary: after extending to a very far end, vested at the old end must
+/// still equal the pinned checkpoint amount.
+#[test]
+fn test_extend_to_far_future_pins_checkpoint_correctly() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    // At t=150 exactly 500 are vested.
+    set_time(&s.env, 150);
+    s.contract.extend_stream(&id, &s.sender, &10_000);
+
+    // Immediately after the extension (still t=150) withdrawable must be 500.
+    assert_eq!(s.contract.withdrawable_amount(&id), 500);
+
+    // The stream must eventually reach its full total.
+    set_time(&s.env, 10_000);
+    assert_eq!(s.contract.streamed_amount(&id), 1_000);
+}
+
+/// Sequence: withdraw then extend — post-extension withdrawable must be 0
+/// until new time elapses (nothing double-payable).
+#[test]
+fn test_withdraw_then_extend_no_double_payment() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    // Withdraw at t=150.
+    set_time(&s.env, 150);
+    assert_eq!(s.contract.withdraw(&id, &s.recipient), 500);
+
+    // Extend to t=300.
+    s.contract.extend_stream(&id, &s.sender, &300);
+
+    // Immediately after extension, nothing new has vested — withdrawable is 0.
+    assert_eq!(s.contract.withdrawable_amount(&id), 0);
+
+    // At t=225 (midpoint of remaining 150..300 window, 250 tokens left),
+    // half the remainder (250) should have vested since the checkpoint.
+    set_time(&s.env, 225);
+    assert_eq!(s.contract.withdrawable_amount(&id), 250);
+}
+
+/// Sequence: top-up then extend — combined mutations must keep total correct.
+#[test]
+fn test_top_up_then_extend_combined() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    // At t=150 the stream has 500 vested.
+    set_time(&s.env, 150);
+
+    // Add 500 more tokens.
+    s.contract.top_up(&id, &s.sender, &500);
+    // Now total = 1_500.  At t=150 vested = 1_500 * 50/100 = 750.
+    assert_eq!(s.contract.streamed_amount(&id), 750);
+
+    // Extend to t=300.  Checkpoint pins 750.
+    s.contract.extend_stream(&id, &s.sender, &300);
+
+    // At t=225 (midpoint of 150..300, 750 tokens remaining after checkpoint):
+    // segment = 750 * 75/150 = 375; total vested = 750 + 375 = 1_125.
+    set_time(&s.env, 225);
+    assert_eq!(s.contract.streamed_amount(&id), 1_125);
+
+    // Full total vested at t=300.
+    set_time(&s.env, 300);
+    assert_eq!(s.contract.streamed_amount(&id), 1_500);
+}
+
+/// Overflow guard: extend on a stream with total = i128::MAX must not panic;
+/// the vesting arithmetic must stay within bounds.
+#[test]
+fn test_extend_with_large_total_does_not_overflow() {
+    let s = setup();
+    let large = 1_000_000_000_000_000_000_i128; // 1e18, well within i128
+    s.token_admin.mint(&s.sender, &large);
+
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &large, &100, &200);
+
+    set_time(&s.env, 150);
+    // Should not panic or return Overflow.
+    s.contract.extend_stream(&id, &s.sender, &300);
+    let _ = s.contract.withdrawable_amount(&id);
+    let _ = s.contract.streamed_amount(&id);
+}
+
+/// `get_summary` and `withdrawable_amount` must agree after an extension.
+#[test]
+fn test_get_summary_agrees_with_withdrawable_after_extend() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    set_time(&s.env, 150);
+    s.contract.extend_stream(&id, &s.sender, &300);
+
+    let summary = s.contract.get_summary(&id);
+    let w = s.contract.withdrawable_amount(&id);
+    assert_eq!(
+        summary.withdrawable, w,
+        "get_summary and withdrawable_amount disagree after extend"
+    );
+}
+
+/// Cancel after extend pays the correct split based on accrual checkpoint.
+#[test]
+fn test_cancel_after_extend_splits_correctly() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    // Extend at t=150 (500 vested, pinned).
+    set_time(&s.env, 150);
+    s.contract.extend_stream(&id, &s.sender, &300);
+
+    // Cancel immediately: recipient gets 500, sender gets 500.
+    s.contract.cancel(&id, &s.sender);
+
+    assert_eq!(s.token.balance(&s.recipient), 500);
+    assert_eq!(s.token.balance(&s.sender), 1_000_000 - 500);
+    assert_eq!(s.token.balance(&s.contract.address), 0);
+}
+
+/// Accrual checkpoint fields on a freshly created stream must be `0` and
+/// `start` respectively (the default that makes the formula identical to
+/// the simple linear case).
+#[test]
+fn test_new_stream_has_zero_accrual_checkpoint() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    let stream = s.contract.get_stream(&id);
+    assert_eq!(stream.accrued, 0);
+    assert_eq!(stream.accrued_at, 100); // equals start
+}
+
+/// After extend, the checkpoint fields must reflect the pinned state.
+#[test]
+fn test_extend_updates_accrual_checkpoint_fields() {
+    let s = setup();
+    let id = s
+        .contract
+        .create_stream(&s.sender, &s.recipient, &1_000, &100, &200);
+
+    set_time(&s.env, 150);
+    s.contract.extend_stream(&id, &s.sender, &300);
+
+    let stream = s.contract.get_stream(&id);
+    assert_eq!(stream.accrued, 500, "accrued must be pinned to vested(150) = 500");
+    assert_eq!(stream.accrued_at, 150, "accrued_at must be the extension timestamp");
+    assert_eq!(stream.end, 300, "end must be updated");
+}
