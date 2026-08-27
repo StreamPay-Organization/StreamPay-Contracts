@@ -338,6 +338,8 @@ impl StreamPayContract {
             start: start_time,
             end: end_time,
             status: Status::Active,
+            accrued: 0,
+            accrued_at: start_time,
         };
 
         storage::write_stream(&env, id, &stream);
@@ -414,6 +416,8 @@ impl StreamPayContract {
                 start: request.start_time,
                 end: request.end_time,
                 status: Status::Active,
+                accrued: 0,
+                accrued_at: request.start_time,
             };
             storage::write_stream(&env, id, &stream);
             events::stream_created(&env, id, &sender, &request.recipient, request.total_amount);
@@ -491,6 +495,10 @@ impl StreamPayContract {
         }
 
         let old_end = stream.end;
+        // Snapshot the currently-vested amount before pushing end forward.
+        // This pins past vesting so the recipient cannot lose already-accrued
+        // funds and `withdrawable` remains monotonically non-decreasing.
+        vesting::advance_checkpoint(&mut stream, env.ledger().timestamp())?;
         stream.end = new_end;
         storage::write_stream(&env, id, &stream);
         storage::extend_instance(&env);

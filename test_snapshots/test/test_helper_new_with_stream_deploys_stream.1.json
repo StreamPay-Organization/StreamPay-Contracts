@@ -288,6 +288,25 @@
                   "map": [
                     {
                       "key": {
+                        "symbol": "accrued"
+                      },
+                      "val": {
+                        "i128": {
+                          "hi": 0,
+                          "lo": 0
+                        }
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "accrued_at"
+                      },
+                      "val": {
+                        "u64": 100
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "end"
                       },
                       "val": {
